@@ -21,7 +21,8 @@ import {
   X,
   Sparkles,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  Users
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -56,6 +57,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'admin-profit', label: 'Perhitungan Laba', icon: TrendingUp, desc: 'Laba bersih & input biaya luar' },
     { id: 'admin-debts', label: 'Kelola Hutang', icon: CreditCard, desc: 'Catatan hutang & cicilan pelanggan' },
     { id: 'admin-restock', label: 'Bon Belanja', icon: ShoppingBag, desc: 'Daftar restock otomatis stok menipis' },
+    { id: 'admin-customers', label: 'Kelola Pelanggan', icon: Users, desc: 'Persetujuan akun & edit pelanggan' },
+    { id: 'admin-admins', label: 'Kelola Admin', icon: ShieldCheck, desc: 'Daftar admin, tambah akun & sandi' },
     { id: 'admin-settings', label: 'Kelola Aplikasi', icon: Settings, desc: 'Nama toko, DANA, & database backup' },
   ];
 
@@ -81,19 +84,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Quick Demo Switcher if not logged in */}
-            {!currentUser && (
-              <button
-                id="quick-demo-admin-btn"
-                type="button"
-                onClick={onQuickLoginAdmin}
-                className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition text-[10px] font-bold"
-              >
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                <span>1-Klik Mode Kasir POS</span>
-              </button>
-            )}
-
             {currentUser ? (
               <div className="flex items-center gap-2">
                 <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
@@ -119,10 +109,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 id="header-login-btn"
                 type="button"
                 onClick={onOpenAuth}
-                className="text-white hover:text-emerald-300 font-semibold flex items-center gap-1 transition text-[11px]"
+                className="text-white hover:text-emerald-300 font-semibold flex items-center gap-1 transition text-[11px] px-2 py-0.5 rounded hover:bg-slate-800"
               >
                 <UserIcon className="w-3 h-3 text-emerald-400" />
-                <span>Masuk / Daftar</span>
+                <span>Masuk / Daftar Akun</span>
               </button>
             )}
           </div>
@@ -134,7 +124,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Logo & Store Name */}
             <div
               id="brand-logo-btn"
-              onClick={() => handleSelectTab('storefront')}
+              onClick={() => handleSelectTab(isAdmin ? 'admin-pos' : 'storefront')}
               className="flex items-center gap-2 cursor-pointer group select-none py-1 min-w-0"
             >
               <div className="w-8 h-8 rounded-lg bg-emerald-600 group-hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs transition shrink-0">
@@ -145,9 +135,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <h1 className="font-extrabold text-slate-900 text-sm sm:text-base leading-none tracking-tight group-hover:text-emerald-600 transition truncate">
                     {settings.storeName}
                   </h1>
-                  <span className="hidden sm:inline-block text-[10px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded leading-none">
-                    POS
-                  </span>
+                  {isAdmin && (
+                    <span className="hidden sm:inline-block text-[10px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded leading-none font-mono">
+                      ADMIN
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 truncate">{settings.appName}</p>
               </div>
@@ -167,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Katalog</span>
+                <span>Katalog Belanja</span>
               </button>
 
               {/* Cart Button */}
@@ -190,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
 
-              {/* User Profile */}
+              {/* User Profile for customer */}
               {currentUser && currentUser.role === 'customer' && (
                 <button
                   id="nav-user-profile-btn"
@@ -207,26 +199,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
-              {/* Quick Kasir POS Access Button for all (switches to Admin mode or POS) */}
-              <button
-                id="nav-kasir-pos-quick-btn"
-                type="button"
-                onClick={() => {
-                  if (!isAdmin) {
-                    onQuickLoginAdmin();
-                  } else {
-                    handleSelectTab('admin-pos');
-                  }
-                }}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                  activeTab === 'admin-pos'
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                }`}
-              >
-                <Calculator className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Kasir POS</span>
-              </button>
+              {/* Kasir POS Button (ONLY visible inside Admin account) */}
+              {isAdmin && (
+                <button
+                  id="nav-kasir-pos-btn"
+                  type="button"
+                  onClick={() => handleSelectTab('admin-pos')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    activeTab === 'admin-pos'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                  }`}
+                >
+                  <Calculator className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Kasir POS</span>
+                </button>
+              )}
 
               {/* Mobile Drawer Toggle */}
               <button
@@ -299,22 +287,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
                 <span>Status Pengguna</span>
                 <span className="font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                  {currentUser ? (isAdmin ? 'Admin / Kasir' : 'Pelanggan') : 'Tamu'}
+                  {currentUser ? (isAdmin ? 'Admin' : 'Pelanggan') : 'Tamu'}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onQuickLoginAdmin();
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Mode Kasir</span>
-                </button>
+              <div>
                 <button
                   type="button"
                   onClick={() => {
@@ -325,17 +302,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                     }
                     setIsMobileMenuOpen(false);
                   }}
-                  className="py-1.5 px-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-1"
+                  className="w-full py-2 px-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs"
                 >
                   <UserIcon className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>{currentUser ? 'Ganti Akun' : 'Masuk / Daftar'}</span>
+                  <span>{currentUser ? 'Keluar / Ganti Akun' : 'Masuk / Daftar Akun'}</span>
                 </button>
               </div>
             </div>
 
             {/* All Menu Items */}
             <div className="space-y-1">
-              <div className="text-[10px] font-bold uppercase text-slate-400 px-1 pt-1">Halaman Utama</div>
+              <div className="text-[10px] font-bold uppercase text-slate-400 px-1 pt-1">Halaman Belanja</div>
               <button
                 type="button"
                 onClick={() => handleSelectTab('storefront')}
@@ -380,41 +357,54 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
-              <div className="text-[10px] font-bold uppercase text-slate-400 px-1 pt-2">Menu Kasir & Admin</div>
-              <div className="grid grid-cols-1 gap-1">
-                {adminNavItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        if (!isAdmin) {
-                          onQuickLoginAdmin();
-                        }
-                        handleSelectTab(item.id as ActiveTab);
-                      }}
-                      className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition ${
-                        isActive
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isActive ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-600 shadow-2xs'}`}>
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold">{item.label}</div>
-                          <div className={`text-[10px] ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>{item.desc}</div>
-                        </div>
-                      </div>
-                      <ChevronRight className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-200' : 'text-slate-400'}`} />
-                    </button>
-                  );
-                })}
-              </div>
+              {isAdmin ? (
+                <>
+                  <div className="text-[10px] font-bold uppercase text-slate-400 px-1 pt-2">Menu Kasir & Admin</div>
+                  <div className="grid grid-cols-1 gap-1">
+                    {adminNavItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleSelectTab(item.id as ActiveTab)}
+                          className={`w-full p-2.5 rounded-xl flex items-center justify-between text-left transition ${
+                            isActive
+                              ? 'bg-emerald-600 text-white shadow-2xs'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isActive ? 'bg-emerald-700 text-white' : 'bg-white text-emerald-600 shadow-2xs'}`}>
+                              <Icon className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold">{item.label}</div>
+                              <div className={`text-[10px] ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>{item.desc}</div>
+                            </div>
+                          </div>
+                          <ChevronRight className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-200' : 'text-slate-400'}`} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAuth();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full p-2.5 rounded-xl border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Masuk sebagai Admin</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -435,34 +425,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           type="button"
-          onClick={() => {
-            if (!isAdmin) onQuickLoginAdmin();
-            handleSelectTab('admin-pos');
-          }}
-          className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-            activeTab === 'admin-pos' ? 'text-emerald-700 font-bold' : 'text-slate-500'
-          }`}
-        >
-          <Calculator className="w-4 h-4" />
-          <span className="text-[10px] mt-0.5">Kasir POS</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (!isAdmin) onQuickLoginAdmin();
-            handleSelectTab('admin-products');
-          }}
-          className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-            activeTab === 'admin-products' ? 'text-emerald-700 font-bold' : 'text-slate-500'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span className="text-[10px] mt-0.5">Barang</span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => handleSelectTab('cart')}
           className={`relative flex flex-col items-center py-1 px-2 rounded-lg transition ${
             activeTab === 'cart' ? 'text-emerald-700 font-bold' : 'text-slate-500'
@@ -476,6 +438,49 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           )}
         </button>
+
+        {isAdmin ? (
+          <>
+            <button
+              type="button"
+              onClick={() => handleSelectTab('admin-pos')}
+              className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                activeTab === 'admin-pos' ? 'text-emerald-700 font-bold' : 'text-slate-500'
+              }`}
+            >
+              <Calculator className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">Kasir POS</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectTab('admin-products')}
+              className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                activeTab === 'admin-products' ? 'text-emerald-700 font-bold' : 'text-slate-500'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              <span className="text-[10px] mt-0.5">Barang</span>
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              if (currentUser) {
+                handleSelectTab('user-profile');
+              } else {
+                onOpenAuth();
+              }
+            }}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+              activeTab === 'user-profile' ? 'text-emerald-700 font-bold' : 'text-slate-500'
+            }`}
+          >
+            <UserIcon className="w-4 h-4" />
+            <span className="text-[10px] mt-0.5">{currentUser ? 'Akun' : 'Masuk'}</span>
+          </button>
+        )}
 
         <button
           type="button"

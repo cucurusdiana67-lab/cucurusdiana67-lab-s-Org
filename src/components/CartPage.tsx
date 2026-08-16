@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CartItem, StoreSettings, User, Order } from '../types';
 import { formatImageUrl, formatRupiah } from '../lib/imageHelper';
 import { storage } from '../lib/storage';
+import { copyOrderToWhatsApp } from '../lib/receiptPrinter';
 import { 
   Trash2, 
   Plus, 
@@ -13,7 +14,11 @@ import {
   Truck, 
   Phone, 
   MapPin, 
-  Wallet 
+  Wallet,
+  LogIn,
+  Copy,
+  MessageSquare,
+  Check
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -26,6 +31,7 @@ interface CartPageProps {
   onClearCart: () => void;
   onBackToShop: () => void;
   onOrderCompleted: (order: Order) => void;
+  onRequestLogin?: () => void;
 }
 
 export const CartPage: React.FC<CartPageProps> = ({
@@ -37,6 +43,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   onClearCart,
   onBackToShop,
   onOrderCompleted,
+  onRequestLogin,
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'dana'>('cod');
   const [notes, setNotes] = useState('');
@@ -45,15 +52,38 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [customerAddress, setCustomerAddress] = useState(currentUser?.address || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [copiedWa, setCopiedWa] = useState(false);
+
+  // Sync with current user profile whenever logged in user changes
+  useEffect(() => {
+    if (currentUser) {
+      setCustomerName(currentUser.name || '');
+      setCustomerPhone(currentUser.phone || '');
+      setCustomerAddress(currentUser.address || '');
+    }
+  }, [currentUser]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.product.sellPrice * item.quantity, 0);
   const totalBuyCost = cart.reduce((sum, item) => sum + item.product.buyPrice * item.quantity, 0);
   const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const profit = subtotal - totalBuyCost;
 
+  const handleCopyWa = async (ord: Order) => {
+    const ok = await copyOrderToWhatsApp(ord, settings);
+    if (ok) {
+      setCopiedWa(true);
+      setTimeout(() => setCopiedWa(false), 2500);
+    }
+  };
+
   const handleCheckout = (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
+
+    if (!currentUser) {
+      if (onRequestLogin) onRequestLogin();
+      return;
+    }
 
     if (!customerName.trim() || !customerAddress.trim()) {
       alert('Mohon lengkapi Nama dan Alamat Pengiriman!');
@@ -114,6 +144,9 @@ export const CartPage: React.FC<CartPageProps> = ({
   };
 
   if (completedOrder) {
+    const rawPhone = settings.storePhone.replace(/[^0-9]/g, '');
+    const storeWaNumber = rawPhone.startsWith('0') ? '62' + rawPhone.slice(1) : rawPhone;
+
     return (
       <div className="max-w-xl mx-auto my-8 bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 text-center space-y-6 shadow-sm animate-in fade-in zoom-in-95 duration-200">
         <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
@@ -145,6 +178,48 @@ export const CartPage: React.FC<CartPageProps> = ({
           <div className="pt-2 border-t border-slate-200 text-slate-600">
             <span>Alamat Kirim: </span>
             <span className="font-medium">{completedOrder.customerAddress}</span>
+          </div>
+        </div>
+
+        {/* WhatsApp Receipt Copy Action */}
+        <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 space-y-2.5 text-left">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-emerald-950 text-xs">
+              <MessageSquare className="w-4 h-4 text-emerald-700" />
+              <span>Salin Bukti Pesanan Format WhatsApp:</span>
+            </div>
+            {copiedWa && (
+              <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Check className="w-3 h-3" /> Berhasil Disalin!
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-emerald-800">
+            Salin teks struk pembelian untuk dikirimkan ke WhatsApp toko atau disimpan sebagai bukti.
+          </p>
+          <div className="flex gap-2">
+            <button
+              id="copy-wa-receipt-btn"
+              type="button"
+              onClick={() => handleCopyWa(completedOrder)}
+              className="flex-1 py-2 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
+            >
+              {copiedWa ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-700" />}
+              <span>{copiedWa ? 'Tersalin di Clipboard' : 'Salin Format WhatsApp'}</span>
+            </button>
+
+            {storeWaNumber && (
+              <a
+                id="send-wa-direct-btn"
+                href={`https://wa.me/${storeWaNumber}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-2xs transition"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>Buka WhatsApp Toko</span>
+              </a>
+            )}
           </div>
         </div>
 
@@ -230,6 +305,29 @@ export const CartPage: React.FC<CartPageProps> = ({
         </button>
       </div>
 
+      {/* Guest Warning: Must login as customer to order */}
+      {!currentUser && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
+          <div className="flex items-start gap-2.5">
+            <LogIn className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-extrabold text-xs sm:text-sm">Wajib Masuk / Daftar Akun Pengguna</div>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Untuk melakukan pemesanan, silakan login ke akun pelanggan Anda agar alamat pengiriman dan no. WhatsApp terisi otomatis.
+              </p>
+            </div>
+          </div>
+          <button
+            id="cart-login-prompt-btn"
+            type="button"
+            onClick={onRequestLogin}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white rounded-lg text-xs font-bold whitespace-nowrap shadow-2xs transition shrink-0"
+          >
+            Masuk / Daftar Akun
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left: Cart Items List */}
         <div className="lg:col-span-7 space-y-2">
@@ -306,12 +404,21 @@ export const CartPage: React.FC<CartPageProps> = ({
             onSubmit={handleCheckout}
             className="bg-white rounded-xl border border-slate-200/90 p-4 space-y-3.5 shadow-2xs sticky top-20"
           >
-            <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm border-b border-slate-100 pb-2 flex items-center justify-between">
-              <span>Informasi Checkout & Pengiriman</span>
+            <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                  Informasi Pengiriman & Checkout
+                </h3>
+                {currentUser && (
+                  <p className="text-[10px] text-emerald-600 font-semibold">
+                    ✓ Data terisi otomatis dari akun: {currentUser.name}
+                  </p>
+                )}
+              </div>
               <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-mono">
                 COD / DANA
               </span>
-            </h3>
+            </div>
 
             {/* Customer Details */}
             <div className="space-y-2.5">
@@ -439,18 +546,31 @@ export const CartPage: React.FC<CartPageProps> = ({
             </div>
 
             {/* Order Submit Button */}
-            <button
-              id="submit-order-btn"
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-bold rounded-lg text-xs shadow-2xs transition flex items-center justify-center gap-1.5"
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Memproses Pesanan...' : 'Konfirmasi Pesanan Sekarang'}</span>
-            </button>
+            {currentUser ? (
+              <button
+                id="submit-order-btn"
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-bold rounded-lg text-xs shadow-2xs transition flex items-center justify-center gap-1.5"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>{isSubmitting ? 'Memproses Pesanan...' : 'Konfirmasi Pesanan Sekarang'}</span>
+              </button>
+            ) : (
+              <button
+                id="login-first-btn"
+                type="button"
+                onClick={onRequestLogin}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-98 text-white font-bold rounded-lg text-xs shadow-2xs transition flex items-center justify-center gap-1.5"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Masuk Akun Pengguna untuk Pesan</span>
+              </button>
+            )}
           </form>
         </div>
       </div>
     </div>
   );
 };
+

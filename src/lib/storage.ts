@@ -205,6 +205,7 @@ export const INITIAL_USERS: User[] = [
     role: 'admin',
     phone: '081298765432',
     password: 'admin',
+    status: 'approved',
     createdAt: new Date().toISOString(),
   },
   {
@@ -215,7 +216,8 @@ export const INITIAL_USERS: User[] = [
     phone: '081311223344',
     address: 'Jl. Melati Blok C No. 12, RT 02/05',
     password: '123',
-    createdAt: new Date().toISOString(),
+    status: 'approved',
+    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
   },
   {
     id: 'user-cust-2',
@@ -225,6 +227,18 @@ export const INITIAL_USERS: User[] = [
     phone: '085799887766',
     address: 'Jl. Mawar No. 45B, Dekat Masjid Nurul Iman',
     password: '123',
+    status: 'approved',
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: 'user-cust-3',
+    name: 'Ahmad Fauzi (Pendaftar Baru)',
+    email: 'ahmad.fauzi@gmail.com',
+    role: 'customer',
+    phone: '081234889900',
+    address: 'Perumahan Griya Asri Blok D No. 8',
+    password: '123',
+    status: 'pending',
     createdAt: new Date().toISOString(),
   },
 ];
@@ -520,7 +534,12 @@ class StorageService {
   getUsers(): User[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-      return raw ? JSON.parse(raw) : INITIAL_USERS;
+      const list: User[] = raw ? JSON.parse(raw) : INITIAL_USERS;
+      // Ensure all users have status property
+      return list.map((u) => ({
+        ...u,
+        status: u.status || (u.role === 'admin' ? 'approved' : 'approved'),
+      }));
     } catch {
       return INITIAL_USERS;
     }
@@ -544,15 +563,83 @@ class StorageService {
   }
 
   saveUser(user: User): User {
+    const userToSave: User = {
+      ...user,
+      status: user.status || (user.role === 'admin' ? 'approved' : 'pending'),
+    };
     const users = this.getUsers();
-    const index = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    const index = users.findIndex((u) => u.id === userToSave.id || u.email.toLowerCase() === userToSave.email.toLowerCase());
     if (index >= 0) {
-      users[index] = { ...users[index], ...user };
+      users[index] = { ...users[index], ...userToSave };
     } else {
-      users.push(user);
+      users.push(userToSave);
     }
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    return user;
+
+    safeAsync(
+      supabase.from('users').upsert({
+        id: userToSave.id,
+        name: userToSave.name,
+        email: userToSave.email,
+        role: userToSave.role,
+        phone: userToSave.phone || null,
+        address: userToSave.address || null,
+        password: userToSave.password || null,
+        status: userToSave.status,
+        created_at: userToSave.createdAt,
+      })
+    );
+
+    return userToSave;
+  }
+
+  updateCustomerStatus(userId: string, status: 'approved' | 'pending' | 'rejected'): boolean {
+    const users = this.getUsers();
+    const user = users.find((u) => u.id === userId);
+    if (!user) return false;
+
+    user.status = status;
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+
+    // If active logged-in user changed status, update session
+    const current = this.getCurrentUser();
+    if (current && current.id === userId) {
+      this.setCurrentUser({ ...current, status });
+    }
+
+    safeAsync(
+      supabase.from('users').update({
+        status: status,
+      }).eq('id', userId)
+    );
+
+    return true;
+  }
+
+  deleteUser(userId: string): boolean {
+    const users = this.getUsers();
+    const target = users.find((u) => u.id === userId);
+    if (!target) return false;
+
+    // Safety: ensure at least one admin remains
+    if (target.role === 'admin') {
+      const adminCount = users.filter((u) => u.role === 'admin').length;
+      if (adminCount <= 1) {
+        return false;
+      }
+    }
+
+    const filtered = users.filter((u) => u.id !== userId);
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(filtered));
+
+    // If current logged-in user is deleted, clear current session
+    const current = this.getCurrentUser();
+    if (current && current.id === userId) {
+      this.setCurrentUser(null);
+    }
+
+    safeAsync(supabase.from('users').delete().eq('id', userId));
+    return true;
   }
 
   // --- ORDERS ---
@@ -620,6 +707,62 @@ class StorageService {
     );
 
     return order;
+  }
+
+  updateOrder(updatedOrder: Order): Order {
+    const orders = this.getOrders();
+    const index = orders.findIndex((o) => o.id === updatedOrder.id);
+    if (index >= 0) {
+      orders[index] = updatedOrder;
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+
+      safeAsync(
+        supabase.from('orders').update({
+          customer_name: updatedOrder.customerName,
+          customer_phone: updatedOrder.customerPhone,
+          customer_address: updatedOrder.customerAddress,
+          payment_method: updatedOrder.paymentMethod,
+          amount_paid: updatedOrder.amountPaid,
+          remaining_debt: updatedOrder.remainingDebt,
+          status: updatedOrder.status,
+          notes: updatedOrder.notes,
+          profit: updatedOrder.profit,
+          total_amount: updatedOrder.totalAmount,
+        }).eq('id', updatedOrder.id)
+      );
+    }
+    return updatedOrder;
+  }
+
+  deleteOrder(orderId: string, restoreStock: boolean = true): boolean {
+    const orders = this.getOrders();
+    const orderToDelete = orders.find((o) => o.id === orderId);
+    if (!orderToDelete) return false;
+
+    // Optional: restore product stock
+    if (restoreStock && orderToDelete.items && orderToDelete.items.length > 0) {
+      const products = this.getProducts();
+      orderToDelete.items.forEach((item) => {
+        const prod = products.find((p) => p.id === item.productId);
+        if (prod) {
+          prod.stock += item.quantity;
+          this.saveProduct(prod);
+        }
+      });
+    }
+
+    // Delete associated debt if exists
+    const debts = this.getDebts();
+    const associatedDebt = debts.find((d) => d.orderId === orderId);
+    if (associatedDebt) {
+      this.deleteDebt(associatedDebt.id);
+    }
+
+    const filtered = orders.filter((o) => o.id !== orderId);
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(filtered));
+
+    safeAsync(supabase.from('orders').delete().eq('id', orderId));
+    return true;
   }
 
   updateOrderStatus(orderId: string, status: Order['status']): void {
@@ -703,6 +846,12 @@ class StorageService {
     return record;
   }
 
+  deleteDebt(debtId: string): void {
+    const debts = this.getDebts().filter((d) => d.id !== debtId);
+    localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+    safeAsync(supabase.from('debts').delete().eq('id', debtId));
+  }
+
   // --- EXTERNAL PROFITS & EXPENSES ---
   getProfits(): ExternalProfitRecord[] {
     try {
@@ -739,6 +888,194 @@ class StorageService {
     const records = this.getProfits().filter((r) => r.id !== id);
     localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(records));
     safeAsync(supabase.from('external_profits').delete().eq('id', id));
+  }
+
+  // --- MANUAL FULL SYNC TO SUPABASE ---
+  async syncAllDataToSupabase(): Promise<{ success: boolean; message: string }> {
+    try {
+      const settings = this.getSettings();
+      const products = this.getProducts();
+      const users = this.getUsers();
+      const orders = this.getOrders();
+      const debts = this.getDebts();
+      const profits = this.getProfits();
+
+      // 1. Sync Settings
+      await supabase.from('store_settings').upsert({
+        id: 'default',
+        app_name: settings.appName,
+        store_name: settings.storeName,
+        store_address: settings.storeAddress,
+        store_phone: settings.storePhone,
+        receipt_footer: settings.receiptFooter,
+        dana_number: settings.danaNumber,
+        dana_holder: settings.danaHolder,
+        cod_enabled: settings.codEnabled,
+        dana_enabled: settings.danaEnabled,
+        qris_url: settings.qrisUrl,
+        low_stock_threshold: settings.lowStockThreshold,
+      });
+
+      // 2. Sync Products
+      if (products.length > 0) {
+        const productRows = products.map((p) => ({
+          id: p.id,
+          barcode: p.barcode,
+          name: p.name,
+          category: p.category,
+          buy_price: p.buyPrice,
+          sell_price: p.sellPrice,
+          stock: p.stock,
+          min_stock: p.minStock,
+          photo_url: p.photoUrl,
+          unit: p.unit,
+          created_at: p.createdAt,
+          updated_at: p.updatedAt,
+        }));
+        await supabase.from('products').upsert(productRows);
+      }
+
+      // 3. Sync Users
+      if (users.length > 0) {
+        const userRows = users.map((u) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          phone: u.phone,
+          address: u.address,
+          created_at: u.createdAt,
+        }));
+        await supabase.from('users').upsert(userRows);
+      }
+
+      // 4. Sync Orders & Relational Order Items
+      if (orders.length > 0) {
+        const orderRows = orders.map((o) => ({
+          id: o.id,
+          order_number: o.orderNumber,
+          type: o.type,
+          customer_id: o.customerId || null,
+          customer_name: o.customerName,
+          customer_phone: o.customerPhone,
+          customer_address: o.customerAddress,
+          items: o.items,
+          subtotal: o.subtotal,
+          total_discount: o.totalDiscount,
+          total_amount: o.totalAmount,
+          total_buy_cost: o.totalBuyCost,
+          profit: o.profit,
+          payment_method: o.paymentMethod,
+          amount_paid: o.amountPaid,
+          remaining_debt: o.remainingDebt,
+          status: o.status,
+          notes: o.notes,
+          created_at: o.createdAt,
+        }));
+        await supabase.from('orders').upsert(orderRows);
+
+        // Relational order_items sync
+        const allOrderItems: any[] = [];
+        orders.forEach((o) => {
+          if (Array.isArray(o.items)) {
+            o.items.forEach((it, idx) => {
+              allOrderItems.push({
+                id: `${o.id}-item-${idx}`,
+                order_id: o.id,
+                product_id: it.productId || null,
+                product_name: it.productName,
+                barcode: it.barcode || null,
+                category: it.category || null,
+                buy_price: it.buyPrice || 0,
+                sell_price: it.sellPrice || 0,
+                quantity: it.quantity || 1,
+                discount: it.discount || 0,
+                subtotal: it.subtotal || 0,
+                created_at: o.createdAt,
+              });
+            });
+          }
+        });
+
+        if (allOrderItems.length > 0) {
+          // Upsert order items silently if table exists
+          try {
+            await supabase.from('order_items').upsert(allOrderItems);
+          } catch (e) {
+            console.warn('order_items sync skipped or table pending creation:', e);
+          }
+        }
+      }
+
+      // 5. Sync Debts & Debt Payments
+      if (debts.length > 0) {
+        const debtRows = debts.map((d) => ({
+          id: d.id,
+          customer_name: d.customerName,
+          customer_phone: d.customerPhone,
+          order_id: d.orderId || null,
+          source: d.source,
+          original_debt: d.originalDebt,
+          remaining_debt: d.remainingDebt,
+          status: d.status,
+          notes: d.notes,
+          payments: d.payments,
+          created_at: d.createdAt,
+          last_payment_date: d.lastPaymentDate,
+        }));
+        await supabase.from('debts').upsert(debtRows);
+
+        // Relational debt_payments sync
+        const allPayments: any[] = [];
+        debts.forEach((d) => {
+          if (Array.isArray(d.payments)) {
+            d.payments.forEach((pm) => {
+              allPayments.push({
+                id: pm.id,
+                debt_id: d.id,
+                amount: pm.amount,
+                payment_date: pm.date,
+                notes: pm.notes || null,
+                created_at: pm.date,
+              });
+            });
+          }
+        });
+
+        if (allPayments.length > 0) {
+          try {
+            await supabase.from('debt_payments').upsert(allPayments);
+          } catch (e) {
+            console.warn('debt_payments sync skipped:', e);
+          }
+        }
+      }
+
+      // 6. Sync Profits
+      if (profits.length > 0) {
+        const profitRows = profits.map((p) => ({
+          id: p.id,
+          title: p.title,
+          type: p.type,
+          amount: p.amount,
+          category: p.category,
+          date: p.date,
+          notes: p.notes,
+          created_at: p.createdAt,
+        }));
+        await supabase.from('external_profits').upsert(profitRows);
+      }
+
+      return {
+        success: true,
+        message: `Sinkronisasi Sukses! ${products.length} produk, ${orders.length} transaksi & pengaturan berhasil diunggah ke Supabase.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Gagal sinkron: ${err?.message || 'Pastikan tabel schema SQL sudah dijalankan di Supabase'}.`,
+      };
+    }
   }
 
   // --- BACKUP & RESTORE DATA (Database & Application) ---

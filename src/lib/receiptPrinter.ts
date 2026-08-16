@@ -277,3 +277,98 @@ export function printRestockReceipt(products: Product[], settings: StoreSettings
   printWindow.document.write(html);
   printWindow.document.close();
 }
+
+/**
+ * Format Order details into a clean, professional WhatsApp text message
+ */
+export function formatOrderWhatsAppText(order: Order, settings: StoreSettings): string {
+  const formattedDate = new Date(order.createdAt).toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const paymentText =
+    order.paymentMethod === 'cash'
+      ? 'TUNAI (CASH)'
+      : order.paymentMethod === 'debt_partial'
+      ? 'HUTANG SEBAGIAN (DP)'
+      : order.paymentMethod === 'debt_full'
+      ? 'HUTANG TOTAL'
+      : order.paymentMethod === 'dana'
+      ? 'TRANSFER DANA / QRIS'
+      : 'BAYAR DI TEMPAT (COD)';
+
+  const itemsList = order.items
+    .map(
+      (item, idx) =>
+        `${idx + 1}. *${item.productName}*\n   ${item.quantity} x ${formatRupiah(item.sellPrice)} = *${formatRupiah(item.subtotal)}*`
+    )
+    .join('\n');
+
+  let text = `🧾 *STRUK BUKTI TRANSAKSI*\n`;
+  text += `*${settings.storeName.toUpperCase()}*\n`;
+  if (settings.storeAddress) text += `📍 ${settings.storeAddress}\n`;
+  if (settings.storePhone) text += `📞 Telp/WA: ${settings.storePhone}\n`;
+  text += `----------------------------------------\n`;
+  text += `No. Pesanan : *#${order.orderNumber}*\n`;
+  text += `Tipe        : ${order.type === 'pos' ? 'KASIR POS' : 'ONLINE'}\n`;
+  text += `Waktu       : ${formattedDate}\n`;
+  text += `Pelanggan   : *${order.customerName}*\n`;
+  if (order.customerPhone) text += `No. Kontak  : ${order.customerPhone}\n`;
+  if (order.customerAddress) text += `Alamat      : ${order.customerAddress}\n`;
+  text += `----------------------------------------\n`;
+  text += `*RINCIAN BARANG:*\n${itemsList}\n`;
+  text += `----------------------------------------\n`;
+  text += `Subtotal    : ${formatRupiah(order.subtotal)}\n`;
+  if (order.totalDiscount > 0) {
+    text += `Diskon      : -${formatRupiah(order.totalDiscount)}\n`;
+  }
+  text += `*TOTAL BAYAR: ${formatRupiah(order.totalAmount)}*\n`;
+  text += `Metode      : ${paymentText}\n`;
+  text += `Jumlah Bayar: ${formatRupiah(order.amountPaid)}\n`;
+
+  if (order.paymentMethod === 'cash' && order.amountPaid >= order.totalAmount) {
+    text += `Kembalian   : ${formatRupiah(order.amountPaid - order.totalAmount)}\n`;
+  }
+  if (order.remainingDebt > 0) {
+    text += `*SISA HUTANG: ${formatRupiah(order.remainingDebt)}*\n`;
+  }
+  if (order.notes) {
+    text += `Catatan     : ${order.notes}\n`;
+  }
+  text += `----------------------------------------\n`;
+  text += `_${settings.receiptFooter || 'Terima kasih telah berbelanja di toko kami!'}_`;
+
+  return text;
+}
+
+/**
+ * Copy formatted order WhatsApp text to clipboard
+ */
+export async function copyOrderToWhatsApp(order: Order, settings: StoreSettings): Promise<boolean> {
+  const text = formatOrderWhatsAppText(order, settings);
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return successful;
+    }
+  } catch (err) {
+    console.error('Failed to copy receipt to WhatsApp format:', err);
+    return false;
+  }
+}
+

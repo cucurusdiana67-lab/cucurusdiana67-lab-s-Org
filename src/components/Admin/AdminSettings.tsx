@@ -35,6 +35,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
   const [copiedSql, setCopiedSql] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +84,17 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
     navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 2000);
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    const result = await storage.syncAllDataToSupabase();
+    setIsSyncing(false);
+    setSyncFeedback(result);
+    setTimeout(() => {
+      setSyncFeedback(null);
+    }, 6000);
   };
 
   const handleReset = () => {
@@ -305,24 +318,49 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
               Query schema database PostgreSQL yang rapi dengan index & RLS policies untuk memastikan egress hemat dan cepat.
             </p>
 
-            <button
-              id="copy-sql-schema-btn"
-              type="button"
-              onClick={handleCopySql}
-              className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
-            >
-              {copiedSql ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span>SQL Berhasil Disalin!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4 text-emerald-600" />
-                  <span>Salin Skrip SQL Schema Supabase</span>
-                </>
-              )}
-            </button>
+            {syncFeedback && (
+              <div
+                className={`p-2.5 rounded-lg text-xs font-semibold border ${
+                  syncFeedback.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}
+              >
+                {syncFeedback.message}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <button
+                id="sync-supabase-now-btn"
+                type="button"
+                disabled={isSyncing}
+                onClick={handleManualSync}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>{isSyncing ? 'Mengunggah Data ke Supabase...' : 'Unggah & Sinkronkan Semua Data ke Supabase'}</span>
+              </button>
+
+              <button
+                id="copy-sql-schema-btn"
+                type="button"
+                onClick={handleCopySql}
+                className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                {copiedSql ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>SQL Berhasil Disalin!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-emerald-600" />
+                    <span>Salin Skrip SQL Schema Supabase</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Reset Danger Zone */}

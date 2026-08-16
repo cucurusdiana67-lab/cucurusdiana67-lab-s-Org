@@ -1,4 +1,5 @@
 export type Role = 'admin' | 'customer';
+export type CustomerStatus = 'approved' | 'pending' | 'rejected';
 
 export interface User {
   id: string;
@@ -8,6 +9,7 @@ export interface User {
   phone?: string;
   address?: string;
   password?: string;
+  status?: CustomerStatus;
   createdAt: string;
 }
 
@@ -129,4 +131,7 @@ export type ActiveTab =
   | 'admin-debts'
   | 'admin-restock'
   | 'admin-settings'
+  | 'admin-admins'
+  | 'admin-customers'
   | 'user-profile';
+

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product, Order, StoreSettings, CartItem, PaymentMethod } from '../../types';
 import { storage } from '../../lib/storage';
 import { formatImageUrl, formatRupiah } from '../../lib/imageHelper';
-import { printThermalReceipt } from '../../lib/receiptPrinter';
+import { printThermalReceipt, copyOrderToWhatsApp } from '../../lib/receiptPrinter';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
 import { 
   Camera, 
@@ -19,7 +19,16 @@ import {
   Percent, 
   CheckCircle2, 
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  History,
+  Edit3,
+  Copy,
+  MessageSquare,
+  Check,
+  Calendar,
+  X,
+  PackageCheck,
+  Phone
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -49,6 +58,30 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [notes, setNotes] = useState('');
 
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
+
+  // Sales History List state
+  const [recentOrders, setRecentOrders] = useState<Order[]>(() => 
+    storage.getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  );
+  const [historySearch, setHistorySearch] = useState('');
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  // Edit Order Modal State
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<PaymentMethod>('cash');
+  const [editStatus, setEditStatus] = useState<'pending' | 'processing' | 'completed' | 'cancelled'>('completed');
+  const [editNotes, setEditNotes] = useState('');
+
+  // Delete Confirmation State
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [restoreStockOnDelete, setRestoreStockOnDelete] = useState(true);
+
+  const refreshOrders = () => {
+    const list = storage.getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setRecentOrders(list);
+  };
 
   const categories = ['Semua', ...Array.from(new Set(products.map((p) => p.category)))];
 
@@ -187,6 +220,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 
     storage.createOrder(newOrder);
     onRefreshProducts();
+    refreshOrders();
     setLastCompletedOrder(newOrder);
     
     // Auto trigger receipt print
@@ -208,8 +242,63 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     }
   };
 
+  // WhatsApp Copy Handler
+  const handleCopyOrderWhatsApp = async (order: Order) => {
+    const success = await copyOrderToWhatsApp(order, settings);
+    if (success) {
+      setCopiedOrderId(order.id);
+      setTimeout(() => setCopiedOrderId(null), 2500);
+    }
+  };
+
+  // Open Edit Order
+  const handleOpenEditOrder = (ord: Order) => {
+    setEditingOrder(ord);
+    setEditCustomerName(ord.customerName);
+    setEditCustomerPhone(ord.customerPhone || '');
+    setEditPaymentMethod(ord.paymentMethod);
+    setEditStatus(ord.status);
+    setEditNotes(ord.notes || '');
+  };
+
+  const handleSaveEditedOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    const updated: Order = {
+      ...editingOrder,
+      customerName: editCustomerName.trim() || 'Pelanggan Umum',
+      customerPhone: editCustomerPhone.trim() || undefined,
+      paymentMethod: editPaymentMethod,
+      status: editStatus,
+      notes: editNotes.trim() || undefined,
+    };
+
+    storage.updateOrder(updated);
+    refreshOrders();
+    setEditingOrder(null);
+  };
+
+  // Delete Order
+  const handleConfirmDeleteOrder = () => {
+    if (!orderToDelete) return;
+    storage.deleteOrder(orderToDelete.id, restoreStockOnDelete);
+    onRefreshProducts();
+    refreshOrders();
+    setOrderToDelete(null);
+  };
+
+  // Filtered History
+  const filteredHistory = recentOrders.filter((ord) => {
+    const q = historySearch.toLowerCase();
+    const matchInv = ord.orderNumber.toLowerCase().includes(q);
+    const matchCust = ord.customerName.toLowerCase().includes(q);
+    const matchItems = ord.items.some((it) => it.productName.toLowerCase().includes(q));
+    return matchInv || matchCust || matchItems;
+  });
+
   return (
-    <div className="space-y-3 pb-16">
+    <div className="space-y-4 pb-16">
       {/* Scanner Modal */}
       <BarcodeScannerModal
         isOpen={isScannerOpen}
@@ -555,20 +644,444 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
               </button>
 
               {lastCompletedOrder && (
-                <button
-                  id="reprint-last-receipt-btn"
-                  type="button"
-                  onClick={() => printThermalReceipt(lastCompletedOrder, settings)}
-                  className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 transition"
-                >
-                  <Printer className="w-3 h-3 text-slate-600" />
-                  <span>Cetak Ulang (#{lastCompletedOrder.orderNumber})</span>
-                </button>
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  <button
+                    id="reprint-last-receipt-btn"
+                    type="button"
+                    onClick={() => printThermalReceipt(lastCompletedOrder, settings)}
+                    className="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Printer className="w-3 h-3 text-slate-600" />
+                    <span>Cetak Struk</span>
+                  </button>
+
+                  <button
+                    id="copy-last-wa-btn"
+                    type="button"
+                    onClick={() => handleCopyOrderWhatsApp(lastCompletedOrder)}
+                    className="py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-md text-xs flex items-center justify-center gap-1.5 transition border border-emerald-200"
+                  >
+                    {copiedOrderId === lastCompletedOrder.id ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        <span>Tersalin!</span>
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="w-3 h-3 text-emerald-600" />
+                        <span>Salin Format WA</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               )}
             </div>
           </form>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* DAFTAR BARANG YANG PERNAH DIJUAL / RIWAYAT TRANSAKSI KASIR (Paling Baru Diatas) */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        {/* Table Header Controls */}
+        <div className="p-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <History className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                <span>Daftar Barang Terjual & Riwayat Transaksi Kasir</span>
+                <span className="text-[10px] font-bold font-mono bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
+                  {recentOrders.length} Transaksi
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Urutan transaksi paling baru di atas. Dilengkapi fitur edit, hapus (kembalikan stok), dan salin bukti format WhatsApp.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              placeholder="Cari faktur, pembeli, atau barang..."
+              className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Clean, Neat Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                <th className="p-3 whitespace-nowrap">Waktu & No. Faktur</th>
+                <th className="p-3">Pembeli</th>
+                <th className="p-3 min-w-[220px]">Daftar Barang Terjual</th>
+                <th className="p-3 whitespace-nowrap">Metode Bayar</th>
+                <th className="p-3 text-right whitespace-nowrap">Total Tagihan</th>
+                <th className="p-3 text-right whitespace-nowrap">Aksi Lengkap</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
+                    Belum ada riwayat transaksi penjualan.
+                  </td>
+                </tr>
+              ) : (
+                filteredHistory.map((ord) => {
+                  const dateStr = new Date(ord.createdAt).toLocaleDateString('id-ID', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+                  const timeStr = new Date(ord.createdAt).toLocaleTimeString('id-ID', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+
+                  return (
+                    <tr key={ord.id} className="hover:bg-slate-50/70 transition">
+                      {/* Date & Invoice */}
+                      <td className="p-3 whitespace-nowrap align-top">
+                        <div className="font-mono font-bold text-slate-900 text-xs flex items-center gap-1">
+                          <span>#{ord.orderNumber}</span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                              ord.type === 'pos'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}
+                          >
+                            {ord.type}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
+                          <span>{dateStr} {timeStr}</span>
+                        </div>
+                      </td>
+
+                      {/* Customer */}
+                      <td className="p-3 align-top">
+                        <div className="font-bold text-slate-800 text-xs truncate max-w-[140px]">
+                          {ord.customerName}
+                        </div>
+                        {ord.customerPhone && (
+                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                            <Phone className="w-2.5 h-2.5" />
+                            <span>{ord.customerPhone}</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Sold Items list */}
+                      <td className="p-3 align-top">
+                        <div className="space-y-1">
+                          {ord.items.map((it, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs gap-2">
+                              <span className="font-medium text-slate-800 truncate max-w-[180px]">
+                                • {it.productName}
+                              </span>
+                              <span className="font-mono text-slate-500 shrink-0 text-[11px]">
+                                {it.quantity}x @ {formatRupiah(it.sellPrice)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {ord.notes && (
+                          <div className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded mt-1 italic inline-block">
+                            Catatan: {ord.notes}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Payment Method & Status */}
+                      <td className="p-3 whitespace-nowrap align-top">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                            ord.paymentMethod === 'cash'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : ord.paymentMethod === 'dana'
+                              ? 'bg-blue-100 text-blue-800'
+                              : ord.paymentMethod === 'debt_partial'
+                              ? 'bg-amber-100 text-amber-900'
+                              : ord.paymentMethod === 'debt_full'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          {ord.paymentMethod === 'cash'
+                            ? 'Tunai (Cash)'
+                            : ord.paymentMethod === 'dana'
+                            ? 'DANA / QRIS'
+                            : ord.paymentMethod === 'debt_partial'
+                            ? 'Hutang DP'
+                            : ord.paymentMethod === 'debt_full'
+                            ? 'Hutang Full'
+                            : ord.paymentMethod.toUpperCase()}
+                        </span>
+                        <div className="mt-1">
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase ${
+                              ord.status === 'completed'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : ord.status === 'cancelled'
+                                ? 'bg-red-50 text-red-700'
+                                : 'bg-amber-50 text-amber-700'
+                            }`}
+                          >
+                            {ord.status === 'completed' ? 'Selesai' : ord.status === 'cancelled' ? 'Batal' : 'Pending'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Total Amount */}
+                      <td className="p-3 text-right whitespace-nowrap align-top">
+                        <div className="font-extrabold font-mono text-slate-900 text-xs">
+                          {formatRupiah(ord.totalAmount)}
+                        </div>
+                        {ord.profit !== undefined && (
+                          <div className="text-[10px] text-emerald-600 font-mono mt-0.5">
+                            Laba: +{formatRupiah(ord.profit)}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Actions (Thermal, WA Copy, Edit, Delete) */}
+                      <td className="p-3 text-right whitespace-nowrap align-top">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* WhatsApp Copy button */}
+                          <button
+                            type="button"
+                            onClick={() => handleCopyOrderWhatsApp(ord)}
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md transition"
+                            title="Salin Struk Format WhatsApp"
+                          >
+                            {copiedOrderId === ord.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          {/* Print Receipt */}
+                          <button
+                            type="button"
+                            onClick={() => printThermalReceipt(ord, settings)}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
+                            title="Cetak Struk Thermal"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Edit button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditOrder(ord)}
+                            className="p-1.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded-md transition"
+                            title="Edit Transaksi"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete button */}
+                          <button
+                            type="button"
+                            onClick={() => setOrderToDelete(ord)}
+                            className="p-1.5 bg-slate-100 hover:bg-red-100 hover:text-red-700 text-slate-400 rounded-md transition"
+                            title="Hapus Transaksi"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL EDIT TRANSAKSI */}
+      {/* ========================================================================= */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 my-8 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white">
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base">
+                  Edit Transaksi #{editingOrder.orderNumber}
+                </h3>
+                <p className="text-[10px] text-slate-400">
+                  Perbarui nama pembeli, status, atau catatan pesanan
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedOrder} className="p-4 space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Nama Pembeli</label>
+                <input
+                  type="text"
+                  required
+                  value={editCustomerName}
+                  onChange={(e) => setEditCustomerName(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">No. WhatsApp Pembeli</label>
+                <input
+                  type="text"
+                  value={editCustomerPhone}
+                  onChange={(e) => setEditCustomerPhone(e.target.value)}
+                  placeholder="0812..."
+                  className="w-full px-2.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Metode Bayar</label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full px-2 py-1.5 text-xs font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                  >
+                    <option value="cash">Tunai (Cash)</option>
+                    <option value="dana">DANA / QRIS</option>
+                    <option value="cod">COD</option>
+                    <option value="debt_partial">Hutang DP</option>
+                    <option value="debt_full">Hutang Full</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Status Transaksi</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full px-2 py-1.5 text-xs font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                  >
+                    <option value="completed">Selesai (Completed)</option>
+                    <option value="pending">Pending</option>
+                    <option value="processing">Diproses</option>
+                    <option value="cancelled">Dibatalkan</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Catatan Tambahan</label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Catatan pesanan..."
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1 font-mono">
+                <div className="flex justify-between text-slate-500">
+                  <span>Total Tagihan:</span>
+                  <span className="font-bold text-slate-900">{formatRupiah(editingOrder.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Jumlah Item:</span>
+                  <span>{editingOrder.items.reduce((s, it) => s + it.quantity, 0)} item</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="submit"
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-2xs transition"
+                >
+                  Simpan Perubahan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingOrder(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL HAPUS TRANSAKSI & RESTORE STOK */}
+      {/* ========================================================================= */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 space-y-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-extrabold text-sm text-slate-900">
+                  Hapus Transaksi #{orderToDelete.orderNumber}?
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Transaksi senilai <b>{formatRupiah(orderToDelete.totalAmount)}</b> oleh <b>{orderToDelete.customerName}</b> akan dihapus permanen.
+                </p>
+              </div>
+
+              <label className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={restoreStockOnDelete}
+                  onChange={(e) => setRestoreStockOnDelete(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                />
+                <span className="text-xs text-slate-700 font-medium">
+                  Kembalikan stok barang yang terjual otomatis ke inventaris
+                </span>
+              </label>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteOrder}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs shadow-2xs transition"
+                >
+                  Ya, Hapus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderToDelete(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

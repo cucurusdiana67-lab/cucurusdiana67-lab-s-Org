@@ -24,6 +24,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [role, setRole] = useState<Role>('customer');
+  const [registerSuccess, setRegisterSuccess] = useState(false);
 
   // Forgot password state
   const [forgotEmail, setForgotEmail] = useState('');
@@ -44,18 +45,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       (u) => u.email.toLowerCase() === cleanEmail && (u.password === password || !u.password)
     );
 
-    if (user) {
-      storage.setCurrentUser(user);
-      onLoginSuccess(user);
-      onClose();
-    } else {
+    if (!user) {
       setError('Email atau kata sandi tidak cocok. Silakan periksa kembali!');
+      return;
     }
+
+    // Check customer approval status
+    if (user.role === 'customer') {
+      if (user.status === 'pending') {
+        setError('Akun Anda masih berstatus "Menunggu Persetujuan Admin". Silakan hubungi admin toko untuk persetujuan akun.');
+        return;
+      }
+      if (user.status === 'rejected') {
+        setError('Akun Anda telah ditolak atau dinonaktifkan oleh Admin. Silakan hubungi pihak toko.');
+        return;
+      }
+    }
+
+    storage.setCurrentUser(user);
+    onLoginSuccess(user);
+    onClose();
   };
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setRegisterSuccess(false);
 
     if (!name.trim() || !email.trim() || !password.trim()) {
       setError('Nama, Email, dan Kata Sandi wajib diisi!');
@@ -65,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const users = storage.getUsers();
     const existing = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
     if (existing) {
-      setError('Email sudah terdaftar. Silakan login!');
+      setError('Email sudah terdaftar. Silakan login atau gunakan reset kata sandi!');
       return;
     }
 
@@ -73,17 +88,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       id: 'user-' + Date.now(),
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      role: role,
+      role: 'customer',
       phone: phone.trim() || '081234567890',
       address: address.trim() || 'Alamat Toko / Rumah',
       password: password,
+      status: 'pending', // Requires admin approval
       createdAt: new Date().toISOString(),
     };
 
     storage.saveUser(newUser);
-    storage.setCurrentUser(newUser);
-    onLoginSuccess(newUser);
-    onClose();
+    setRegisterSuccess(true);
   };
 
   const handleForgotPassword = (e: React.FormEvent) => {
@@ -280,7 +294,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {/* REGISTER FORM */}
           {tab === 'register' && (
+            registerSuccess ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-2xs">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Pendaftaran Berhasil!</h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    Akun <span className="font-bold text-slate-800">{email}</span> telah terdaftar dan saat ini berstatus <span className="font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Menunggu Persetujuan Admin</span>.
+                  </p>
+                </div>
+                <div className="p-2.5 bg-white rounded-lg border border-amber-200/80 text-[11px] text-slate-600 text-left">
+                  <p className="font-semibold text-slate-800 mb-1">Informasi:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-slate-600 text-[10.5px]">
+                    <li>Admin toko akan memverifikasi dan menyetujui akun Anda.</li>
+                    <li>Setelah disetujui, Anda dapat langsung login untuk berbelanja.</li>
+                  </ul>
+                </div>
+                <button
+                  id="after-reg-login-btn"
+                  type="button"
+                  onClick={() => {
+                    setTab('login');
+                    setRegisterSuccess(false);
+                  }}
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-2xs transition"
+                >
+                  Kembali ke Halaman Masuk
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleRegister} className="space-y-2.5">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-emerald-800 text-[11px] font-medium flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Pendaftaran akun pelanggan untuk kemudahan belanja & pengiriman otomatis.</span>
+              </div>
+
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Nama Lengkap</label>
                 <div className="relative">
@@ -291,7 +341,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Contoh: Ahmad Subagyo"
+                    placeholder="Contoh: Budi Santoso"
                     className="w-full pl-8 pr-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
@@ -315,54 +365,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     id="reg-phone-input"
                     type="text"
+                    required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="0812..."
+                    placeholder="081234567890"
                     className="w-full px-2.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Alamat Pengiriman</label>
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Alamat Pengiriman (Otomatis saat Pesan)</label>
                 <div className="relative">
                   <MapPin className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
                   <textarea
                     id="reg-address-input"
                     rows={2}
+                    required
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Jl. Mawar No. 12, RT 01/02..."
+                    placeholder="Jl. Melati No. 15, RT 02/05, Desa/Kelurahan..."
                     className="w-full pl-8 pr-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Kata Sandi</label>
-                  <input
-                    id="reg-password-input"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimal 4 karakter"
-                    className="w-full px-2.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Daftar Sebagai</label>
-                  <select
-                    id="reg-role-select"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as Role)}
-                    className="w-full px-2 py-1.5 text-xs font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-                  >
-                    <option value="customer">Pelanggan</option>
-                    <option value="admin">Admin / Kasir</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Kata Sandi</label>
+                <input
+                  id="reg-password-input"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minimal 4 karakter"
+                  className="w-full px-2.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
               </div>
 
               <button
@@ -370,9 +408,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="submit"
                 className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-bold rounded-lg text-xs shadow-2xs transition mt-1.5"
               >
-                Buat Akun Baru
+                Daftar Akun Pelanggan
               </button>
             </form>
+            )
           )}
 
           {/* FORGOT PASSWORD FORM */}
