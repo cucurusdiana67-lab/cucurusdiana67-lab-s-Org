@@ -1,0 +1,6 @@
+{
+  "name": "Toko Pintar & Kasir POS",
+  "description": "Aplikasi Toko Online dan Sistem Kasir POS terintegrasi dengan manajemen stok, bon belanja, hutang piutang, dan cetak struk thermal.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
