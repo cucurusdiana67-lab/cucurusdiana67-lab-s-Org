@@ -208,173 +208,13 @@ export const INITIAL_USERS: User[] = [
     status: 'approved',
     createdAt: new Date().toISOString(),
   },
-  {
-    id: 'user-cust-1',
-    name: 'Budi Santoso',
-    email: 'budi@gmail.com',
-    role: 'customer',
-    phone: '081311223344',
-    address: 'Jl. Melati Blok C No. 12, RT 02/05',
-    password: '123',
-    status: 'approved',
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-  },
-  {
-    id: 'user-cust-2',
-    name: 'Siti Rahma',
-    email: 'siti@gmail.com',
-    role: 'customer',
-    phone: '085799887766',
-    address: 'Jl. Mawar No. 45B, Dekat Masjid Nurul Iman',
-    password: '123',
-    status: 'approved',
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-  {
-    id: 'user-cust-3',
-    name: 'Ahmad Fauzi (Pendaftar Baru)',
-    email: 'ahmad.fauzi@gmail.com',
-    role: 'customer',
-    phone: '081234889900',
-    address: 'Perumahan Griya Asri Blok D No. 8',
-    password: '123',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  },
 ];
 
-export const INITIAL_DEBTS: DebtRecord[] = [
-  {
-    id: 'debt-1',
-    customerName: 'Pak Joko (Warung Pojok)',
-    customerPhone: '081234111222',
-    source: 'pos',
-    originalDebt: 150000,
-    remainingDebt: 80000,
-    status: 'partial',
-    notes: 'Belanja sembako untuk warung nasi',
-    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-    lastPaymentDate: new Date(Date.now() - 1 * 86400000).toISOString(),
-    payments: [
-      {
-        id: 'pay-1',
-        amount: 70000,
-        date: new Date(Date.now() - 1 * 86400000).toISOString(),
-        notes: 'Angsuran pertama tunai',
-      },
-    ],
-  },
-  {
-    id: 'debt-2',
-    customerName: 'Bu RT Endang',
-    customerPhone: '085678999000',
-    source: 'external',
-    originalDebt: 50000,
-    remainingDebt: 50000,
-    status: 'unpaid',
-    notes: 'Catatan hutang arisan gula & minyak',
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    payments: [],
-  },
-];
+export const INITIAL_DEBTS: DebtRecord[] = [];
 
-export const INITIAL_PROFITS: ExternalProfitRecord[] = [
-  {
-    id: 'prof-1',
-    title: 'Penjualan Kardus Bekas & Plastik',
-    type: 'income',
-    amount: 85000,
-    category: 'Lain-lain',
-    date: new Date().toISOString().split('T')[0],
-    notes: 'Hasil timbang kardus indomie dan botol bekas',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'prof-2',
-    title: 'Biaya Listrik Toko Bulanan',
-    type: 'expense',
-    amount: 150000,
-    category: 'Operasional',
-    date: new Date().toISOString().split('T')[0],
-    notes: 'Token listrik 900VA',
-    createdAt: new Date().toISOString(),
-  },
-];
+export const INITIAL_PROFITS: ExternalProfitRecord[] = [];
 
-export const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ord-101',
-    orderNumber: 'TRX-POS-' + Date.now().toString().slice(-6),
-    type: 'pos',
-    customerName: 'Pelanggan Umum',
-    items: [
-      {
-        productId: 'prod-1',
-        productName: 'Beras Pandan Wangi Premium 5kg',
-        buyPrice: 65000,
-        sellPrice: 75000,
-        quantity: 1,
-        subtotal: 75000,
-      },
-      {
-        productId: 'prod-2',
-        productName: 'Minyak Goreng Sania 2 Liter',
-        buyPrice: 32000,
-        sellPrice: 36000,
-        quantity: 2,
-        subtotal: 72000,
-      },
-    ],
-    subtotal: 147000,
-    totalDiscount: 0,
-    totalAmount: 147000,
-    totalBuyCost: 129000,
-    profit: 18000,
-    paymentMethod: 'cash',
-    amountPaid: 150000,
-    remainingDebt: 0,
-    status: 'completed',
-    createdAt: new Date(Date.now() - 4 * 3600000).toISOString(),
-  },
-  {
-    id: 'ord-102',
-    orderNumber: 'ORD-ONL-' + (Date.now() - 1000).toString().slice(-6),
-    type: 'online',
-    customerId: 'user-cust-1',
-    customerName: 'Budi Santoso',
-    customerPhone: '081311223344',
-    customerAddress: 'Jl. Melati Blok C No. 12',
-    items: [
-      {
-        productId: 'prod-4',
-        productName: 'Indomie Goreng Spesial (Dus isi 40)',
-        buyPrice: 110000,
-        sellPrice: 122000,
-        quantity: 1,
-        subtotal: 122000,
-      },
-      {
-        productId: 'prod-6',
-        productName: 'Kopi Kapal Api Special Mix 1 Renceng (10 sachet)',
-        buyPrice: 13500,
-        sellPrice: 16000,
-        quantity: 2,
-        subtotal: 32000,
-      },
-    ],
-    subtotal: 154000,
-    totalDiscount: 0,
-    totalAmount: 154000,
-    totalBuyCost: 137000,
-    profit: 17000,
-    paymentMethod: 'cod',
-    amountPaid: 154000,
-    remainingDebt: 0,
-    status: 'pending',
-    notes: 'Tolong diantar sebelum maghrib ya mas',
-    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-];
+export const INITIAL_ORDERS: Order[] = [];
 
 // Helper to safely execute background Supabase sync without crashing or blocking
 function safeAsync(promise: PromiseLike<any>) {
@@ -383,10 +223,43 @@ function safeAsync(promise: PromiseLike<any>) {
 
 class StorageService {
   private isSupabaseOnline = true;
+  private lastSyncTimestamp: string | null = null;
+  private isSyncing = false;
+  private listeners: Array<() => void> = [];
 
   constructor() {
     this.initLocalData();
-    this.trySyncSupabase();
+    this.setupRealtime();
+    // Automatically pull latest data from Supabase in the background
+    this.pullAllDataFromSupabase(true).catch(() => {});
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  notifyListeners(): void {
+    this.listeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        console.error('Storage listener error:', e);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app_storage_synced'));
+    }
+  }
+
+  getSupabaseStatus(): { isOnline: boolean; lastSync: string | null; isSyncing: boolean } {
+    return {
+      isOnline: this.isSupabaseOnline,
+      lastSync: this.lastSyncTimestamp,
+      isSyncing: this.isSyncing,
+    };
   }
 
   private initLocalData() {
@@ -398,6 +271,21 @@ class StorageService {
     }
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+    } else {
+      // Clean up demo customer accounts if present in existing storage
+      try {
+        const existingUsers: User[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
+        const demoEmails = ['budi@gmail.com', 'siti@gmail.com', 'ahmad.fauzi@gmail.com'];
+        const demoIds = ['user-cust-1', 'user-cust-2', 'user-cust-3'];
+        const cleanedUsers = existingUsers.filter(
+          (u) => !demoEmails.includes(u.email.toLowerCase()) && !demoIds.includes(u.id)
+        );
+        if (cleanedUsers.length !== existingUsers.length) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(cleanedUsers.length > 0 ? cleanedUsers : INITIAL_USERS));
+        }
+      } catch {
+        // ignore
+      }
     }
     if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) {
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
@@ -409,22 +297,225 @@ class StorageService {
       localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(INITIAL_PROFITS));
     }
     // Default current user to guest or remembered user
-    if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
-      // no user logged in initially
+    if (localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
+      try {
+        const cur: User = JSON.parse(localStorage.getItem(STORAGE_KEYS.CURRENT_USER) || '{}');
+        if (['budi@gmail.com', 'siti@gmail.com', 'ahmad.fauzi@gmail.com'].includes(cur.email?.toLowerCase())) {
+          localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        }
+      } catch {
+        // ignore
+      }
     }
   }
 
-  // --- Background Supabase sync (Low Egress & Graceful Fallback) ---
-  private async trySyncSupabase() {
+  // --- Realtime WebSocket Synchronization ---
+  private setupRealtime() {
     try {
-      // Check store_settings table
-      const { data: settingsData, error } = await supabase.from('store_settings').select('*').limit(1);
-      if (!error && settingsData && settingsData.length > 0) {
-        // Table exists and connected!
-        this.isSupabaseOnline = true;
+      supabase
+        .channel('public:db-realtime-sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public' },
+          async (payload) => {
+            console.log('Realtime change from Supabase:', payload.table, payload.eventType);
+            await this.pullAllDataFromSupabase(true);
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            this.isSupabaseOnline = true;
+          }
+        });
+    } catch (err) {
+      console.warn('Realtime subscription skipped or unavailable:', err);
+    }
+  }
+
+  // --- PULL / DOWNLOAD ALL DATA FROM SUPABASE CLOUD ---
+  async pullAllDataFromSupabase(isAuto: boolean = false): Promise<{ success: boolean; message: string }> {
+    if (this.isSyncing && !isAuto) {
+      return { success: false, message: 'Sinkronisasi sedang berlangsung...' };
+    }
+
+    this.isSyncing = true;
+    try {
+      // 1. Fetch Store Settings
+      const { data: remoteSettings, error: setErr } = await supabase
+        .from('store_settings')
+        .select('*')
+        .limit(1);
+
+      if (!setErr && remoteSettings && remoteSettings.length > 0) {
+        const rs = remoteSettings[0];
+        const settings: StoreSettings = {
+          appName: rs.app_name || rs.appName || INITIAL_SETTINGS.appName,
+          storeName: rs.store_name || rs.storeName || INITIAL_SETTINGS.storeName,
+          storeAddress: rs.store_address || rs.storeAddress || INITIAL_SETTINGS.storeAddress,
+          storePhone: rs.store_phone || rs.storePhone || INITIAL_SETTINGS.storePhone,
+          receiptFooter: rs.receipt_footer || rs.receiptFooter || INITIAL_SETTINGS.receiptFooter,
+          danaNumber: rs.dana_number || rs.danaNumber || INITIAL_SETTINGS.danaNumber,
+          danaHolder: rs.dana_holder || rs.danaHolder || INITIAL_SETTINGS.danaHolder,
+          codEnabled: rs.cod_enabled !== undefined ? rs.cod_enabled : true,
+          danaEnabled: rs.dana_enabled !== undefined ? rs.dana_enabled : true,
+          qrisUrl: rs.qris_url || rs.qrisUrl || '',
+          lowStockThreshold: rs.low_stock_threshold || rs.lowStockThreshold || 5,
+        };
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       }
-    } catch {
+
+      // 2. Fetch Products
+      const { data: remoteProducts, error: prodErr } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!prodErr && remoteProducts) {
+        const mappedProducts: Product[] = remoteProducts.map((p: any) => ({
+          id: p.id,
+          barcode: p.barcode || '',
+          name: p.name,
+          category: p.category,
+          buyPrice: Number(p.buy_price ?? p.buyPrice ?? 0),
+          sellPrice: Number(p.sell_price ?? p.sellPrice ?? 0),
+          stock: Number(p.stock ?? 0),
+          minStock: Number(p.min_stock ?? p.minStock ?? 5),
+          photoUrl: p.photo_url || p.photoUrl || '',
+          unit: p.unit || 'Pcs',
+          createdAt: p.created_at || p.createdAt || new Date().toISOString(),
+          updatedAt: p.updated_at || p.updatedAt || new Date().toISOString(),
+        }));
+        
+        // If Supabase table is populated or explicitly empty, store the exact cloud state
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
+        localStorage.setItem('has_synced_cloud', 'true');
+      }
+
+      // 3. Fetch Users (Admins and Customers)
+      const { data: remoteUsers, error: userErr } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (!userErr && remoteUsers && remoteUsers.length > 0) {
+        const mappedUsers: User[] = remoteUsers.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role || 'customer',
+          phone: u.phone || '',
+          address: u.address || '',
+          password: u.password || u.password_hash || 'admin',
+          status: u.status || (u.role === 'admin' ? 'approved' : 'pending'),
+          createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+        }));
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mappedUsers));
+
+        // If current logged-in user changed/updated remotely, update active session
+        const cur = this.getCurrentUser();
+        if (cur) {
+          const fresh = mappedUsers.find((u) => u.id === cur.id || u.email.toLowerCase() === cur.email.toLowerCase());
+          if (fresh) {
+            this.setCurrentUser(fresh);
+          }
+        }
+      }
+
+      // 4. Fetch Orders
+      const { data: remoteOrders, error: ordErr } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!ordErr && remoteOrders) {
+        const mappedOrders: Order[] = remoteOrders.map((o: any) => ({
+          id: o.id,
+          orderNumber: o.order_number || o.orderNumber,
+          type: o.type || 'pos',
+          customerId: o.customer_id || o.customerId,
+          customerName: o.customer_name || o.customerName,
+          customerPhone: o.customer_phone || o.customerPhone,
+          customerAddress: o.customer_address || o.customerAddress,
+          items: typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []),
+          subtotal: Number(o.subtotal || 0),
+          totalDiscount: Number(o.total_discount ?? o.totalDiscount ?? 0),
+          totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
+          totalBuyCost: Number(o.total_buy_cost ?? o.totalBuyCost ?? 0),
+          profit: Number(o.profit || 0),
+          paymentMethod: o.payment_method || o.paymentMethod || 'cash',
+          amountPaid: Number(o.amount_paid ?? o.amountPaid ?? 0),
+          remainingDebt: Number(o.remaining_debt ?? o.remainingDebt ?? 0),
+          status: o.status || 'completed',
+          notes: o.notes || '',
+          createdAt: o.created_at || o.createdAt || new Date().toISOString(),
+        }));
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mappedOrders));
+      }
+
+      // 5. Fetch Debts
+      const { data: remoteDebts, error: debtErr } = await supabase
+        .from('debts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!debtErr && remoteDebts) {
+        const mappedDebts: DebtRecord[] = remoteDebts.map((d: any) => ({
+          id: d.id,
+          customerName: d.customer_name || d.customerName,
+          customerPhone: d.customer_phone || d.customerPhone,
+          customerId: d.customer_id || d.customerId,
+          orderId: d.order_id || d.orderId,
+          source: d.source || 'pos',
+          originalDebt: Number(d.original_debt ?? d.originalDebt ?? 0),
+          remainingDebt: Number(d.remaining_debt ?? d.remainingDebt ?? 0),
+          status: d.status || 'unpaid',
+          notes: d.notes || '',
+          payments: typeof d.payments === 'string' ? JSON.parse(d.payments) : (d.payments || []),
+          createdAt: d.created_at || d.createdAt || new Date().toISOString(),
+          lastPaymentDate: d.last_payment_date || d.lastPaymentDate,
+        }));
+        localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(mappedDebts));
+      }
+
+      // 6. Fetch External Profits
+      const { data: remoteProfits, error: profErr } = await supabase
+        .from('external_profits')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!profErr && remoteProfits) {
+        const mappedProfits: ExternalProfitRecord[] = remoteProfits.map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          type: p.type,
+          amount: Number(p.amount || 0),
+          category: p.category,
+          date: p.date,
+          notes: p.notes || '',
+          createdAt: p.created_at || p.createdAt || new Date().toISOString(),
+        }));
+        localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(mappedProfits));
+      }
+
+      this.isSupabaseOnline = true;
+      this.lastSyncTimestamp = new Date().toISOString();
+      this.notifyListeners();
+
+      const prodCount = remoteProducts ? remoteProducts.length : 0;
+      const userCount = remoteUsers ? remoteUsers.length : 0;
+      return {
+        success: true,
+        message: `Sinkronisasi data cloud sukses! Memuat ${prodCount} produk dan ${userCount} pengguna dari database Supabase.`,
+      };
+    } catch (err: any) {
+      console.error('Error pulling from Supabase:', err);
       this.isSupabaseOnline = false;
+      return {
+        success: false,
+        message: `Gagal memuat data dari cloud: ${err?.message || 'Koneksi database terputus'}`,
+      };
+    } finally {
+      this.isSyncing = false;
     }
   }
 
@@ -440,7 +531,8 @@ class StorageService {
 
   saveSettings(settings: StoreSettings): void {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-    // Asynchronously update supabase if possible
+    this.notifyListeners();
+    // Asynchronously update supabase
     safeAsync(
       supabase.from('store_settings').upsert({
         id: 'default',
@@ -455,6 +547,7 @@ class StorageService {
         dana_enabled: settings.danaEnabled,
         qris_url: settings.qrisUrl,
         low_stock_threshold: settings.lowStockThreshold,
+        updated_at: new Date().toISOString(),
       })
     );
   }
@@ -484,8 +577,9 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    this.notifyListeners();
 
-    // Low egress upsert
+    // Low egress upsert to Supabase
     safeAsync(
       supabase.from('products').upsert({
         id: updated.id,
@@ -498,6 +592,7 @@ class StorageService {
         min_stock: updated.minStock,
         photo_url: updated.photoUrl,
         unit: updated.unit,
+        created_at: updated.createdAt,
         updated_at: updated.updatedAt,
       })
     );
@@ -508,6 +603,7 @@ class StorageService {
   deleteProduct(id: string): void {
     const products = this.getProducts().filter((p) => p.id !== id);
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    this.notifyListeners();
     safeAsync(supabase.from('products').delete().eq('id', id));
   }
 
@@ -519,6 +615,7 @@ class StorageService {
     item.stock = Math.max(0, item.stock - quantityToDeduct);
     item.updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    this.notifyListeners();
 
     safeAsync(
       supabase.from('products').update({
@@ -535,7 +632,6 @@ class StorageService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.USERS);
       const list: User[] = raw ? JSON.parse(raw) : INITIAL_USERS;
-      // Ensure all users have status property
       return list.map((u) => ({
         ...u,
         status: u.status || (u.role === 'admin' ? 'approved' : 'approved'),
@@ -560,6 +656,7 @@ class StorageService {
     } else {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     }
+    this.notifyListeners();
   }
 
   saveUser(user: User): User {
@@ -575,6 +672,7 @@ class StorageService {
       users.push(userToSave);
     }
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.notifyListeners();
 
     safeAsync(
       supabase.from('users').upsert({
@@ -584,6 +682,7 @@ class StorageService {
         role: userToSave.role,
         phone: userToSave.phone || null,
         address: userToSave.address || null,
+        password_hash: userToSave.password || null,
         password: userToSave.password || null,
         status: userToSave.status,
         created_at: userToSave.createdAt,
@@ -601,10 +700,11 @@ class StorageService {
     user.status = status;
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
 
-    // If active logged-in user changed status, update session
     const current = this.getCurrentUser();
     if (current && current.id === userId) {
       this.setCurrentUser({ ...current, status });
+    } else {
+      this.notifyListeners();
     }
 
     safeAsync(
@@ -632,10 +732,11 @@ class StorageService {
     const filtered = users.filter((u) => u.id !== userId);
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(filtered));
 
-    // If current logged-in user is deleted, clear current session
     const current = this.getCurrentUser();
     if (current && current.id === userId) {
       this.setCurrentUser(null);
+    } else {
+      this.notifyListeners();
     }
 
     safeAsync(supabase.from('users').delete().eq('id', userId));
@@ -647,7 +748,6 @@ class StorageService {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.ORDERS);
       const orders: Order[] = raw ? JSON.parse(raw) : INITIAL_ORDERS;
-      // Sort newest first
       return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch {
       return INITIAL_ORDERS;
@@ -664,7 +764,6 @@ class StorageService {
       this.updateStock(item.productId, item.quantity);
     });
 
-    // If order has debt (debt_partial or debt_full), create or update DebtRecord
     if (order.remainingDebt > 0) {
       this.createDebtRecord({
         id: 'debt-' + Date.now(),
@@ -681,7 +780,9 @@ class StorageService {
       });
     }
 
-    // Try sync to Supabase
+    this.notifyListeners();
+
+    // Sync to Supabase
     safeAsync(
       supabase.from('orders').insert({
         id: order.id,
@@ -715,6 +816,7 @@ class StorageService {
     if (index >= 0) {
       orders[index] = updatedOrder;
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+      this.notifyListeners();
 
       safeAsync(
         supabase.from('orders').update({
@@ -739,7 +841,6 @@ class StorageService {
     const orderToDelete = orders.find((o) => o.id === orderId);
     if (!orderToDelete) return false;
 
-    // Optional: restore product stock
     if (restoreStock && orderToDelete.items && orderToDelete.items.length > 0) {
       const products = this.getProducts();
       orderToDelete.items.forEach((item) => {
@@ -751,7 +852,6 @@ class StorageService {
       });
     }
 
-    // Delete associated debt if exists
     const debts = this.getDebts();
     const associatedDebt = debts.find((d) => d.orderId === orderId);
     if (associatedDebt) {
@@ -760,6 +860,7 @@ class StorageService {
 
     const filtered = orders.filter((o) => o.id !== orderId);
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(filtered));
+    this.notifyListeners();
 
     safeAsync(supabase.from('orders').delete().eq('id', orderId));
     return true;
@@ -771,6 +872,7 @@ class StorageService {
     if (order) {
       order.status = status;
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+      this.notifyListeners();
       safeAsync(supabase.from('orders').update({ status }).eq('id', orderId));
     }
   }
@@ -790,6 +892,7 @@ class StorageService {
     const debts = this.getDebts();
     debts.unshift(debt);
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+    this.notifyListeners();
 
     safeAsync(
       supabase.from('debts').insert({
@@ -833,6 +936,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+    this.notifyListeners();
 
     safeAsync(
       supabase.from('debts').update({
@@ -849,6 +953,7 @@ class StorageService {
   deleteDebt(debtId: string): void {
     const debts = this.getDebts().filter((d) => d.id !== debtId);
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+    this.notifyListeners();
     safeAsync(supabase.from('debts').delete().eq('id', debtId));
   }
 
@@ -867,6 +972,7 @@ class StorageService {
     const records = this.getProfits();
     records.unshift(record);
     localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(records));
+    this.notifyListeners();
 
     safeAsync(
       supabase.from('external_profits').insert({
@@ -887,6 +993,7 @@ class StorageService {
   deleteProfitRecord(id: string): void {
     const records = this.getProfits().filter((r) => r.id !== id);
     localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(records));
+    this.notifyListeners();
     safeAsync(supabase.from('external_profits').delete().eq('id', id));
   }
 

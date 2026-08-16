@@ -38,11 +38,52 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Sync state refreshers
+  // Sync state refreshers from local/cloud storage
+  const refreshAllState = () => {
+    setSettings(storage.getSettings());
+    setProducts(storage.getProducts());
+    setOrders(storage.getOrders());
+    setDebts(storage.getDebts());
+    setProfits(storage.getProfits());
+    setCurrentUser(storage.getCurrentUser());
+  };
+
   const refreshProducts = () => setProducts(storage.getProducts());
   const refreshOrders = () => setOrders(storage.getOrders());
   const refreshDebts = () => setDebts(storage.getDebts());
   const refreshProfits = () => setProfits(storage.getProfits());
+
+  // Setup live sync with Supabase and cross-tab/device storage updates
+  useEffect(() => {
+    // 1. Initial pull from Supabase cloud
+    storage.pullAllDataFromSupabase(true).then(() => {
+      refreshAllState();
+    });
+
+    // 2. Subscribe to internal storage and realtime changes
+    const unsubscribe = storage.subscribe(() => {
+      refreshAllState();
+    });
+
+    // 3. Window sync event listener
+    const handleSyncEvent = () => {
+      refreshAllState();
+    };
+    window.addEventListener('app_storage_synced', handleSyncEvent);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('app_storage_synced', handleSyncEvent);
+    };
+  }, []);
+
+  // Clean up cart items if a product was deleted
+  useEffect(() => {
+    setCart((prevCart) => {
+      const validCart = prevCart.filter((item) => products.some((p) => p.id === item.product.id));
+      return validCart.length !== prevCart.length ? validCart : prevCart;
+    });
+  }, [products]);
 
   // Handle Add to Cart
   const handleAddToCart = (product: Product, quantity: number) => {

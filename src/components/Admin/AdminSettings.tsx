@@ -37,6 +37,19 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [supabaseStatus, setSupabaseStatus] = useState(() => storage.getSupabaseStatus());
+
+  const handlePullSync = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    const result = await storage.pullAllDataFromSupabase();
+    setIsSyncing(false);
+    setSupabaseStatus(storage.getSupabaseStatus());
+    setSyncFeedback(result);
+    setTimeout(() => {
+      setSyncFeedback(null);
+    }, 6000);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,10 +316,12 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Supabase Database (Low Egress)</span>
+                <span>Supabase Database (Multi-Device Sync)</span>
               </h3>
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                Terkoneksi
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                supabaseStatus.isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {supabaseStatus.isOnline ? '🟢 Terkoneksi Cloud' : '🟡 Offline / Cek Koneksi'}
               </span>
             </div>
 
@@ -314,8 +329,14 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
               URL: {SUPABASE_URL}
             </div>
 
+            {supabaseStatus.lastSync && (
+              <p className="text-[11px] text-slate-500 font-medium">
+                Terakhir sinkron: {new Date(supabaseStatus.lastSync).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ({new Date(supabaseStatus.lastSync).toLocaleDateString('id-ID')})
+              </p>
+            )}
+
             <p className="text-xs text-slate-500">
-              Query schema database PostgreSQL yang rapi dengan index & RLS policies untuk memastikan egress hemat dan cepat.
+              Database tersinkronisasi otomatis antar HP & Laptop. Anda juga dapat menarik data terbaru atau mengunggah data manual di bawah ini.
             </p>
 
             {syncFeedback && (
@@ -331,16 +352,29 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
             )}
 
             <div className="space-y-2">
-              <button
-                id="sync-supabase-now-btn"
-                type="button"
-                disabled={isSyncing}
-                onClick={handleManualSync}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>{isSyncing ? 'Mengunggah Data ke Supabase...' : 'Unggah & Sinkronkan Semua Data ke Supabase'}</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  id="pull-supabase-now-btn"
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={handlePullSync}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs"
+                >
+                  <RotateCcw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Menarik Data...' : 'Tarik Data Terbaru (Pull)'}</span>
+                </button>
+
+                <button
+                  id="sync-supabase-now-btn"
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={handleManualSync}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-xs"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isSyncing ? 'Mengunggah...' : 'Unggah Data (Push)'}</span>
+                </button>
+              </div>
 
               <button
                 id="copy-sql-schema-btn"

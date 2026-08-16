@@ -117,18 +117,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const quickLoginAs = (emailTarget: string, passTarget: string) => {
-    setEmail(emailTarget);
-    setPassword(passTarget);
-    const users = storage.getUsers();
-    const user = users.find((u) => u.email.toLowerCase() === emailTarget.toLowerCase());
-    if (user) {
-      storage.setCurrentUser(user);
-      onLoginSuccess(user);
-      onClose();
-    }
-  };
-
   return (
     <div id="auth-modal-backdrop" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/90 my-8 animate-in fade-in zoom-in-95 duration-150">
@@ -262,33 +250,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 Masuk ke Aplikasi
               </button>
-
-              {/* Quick Login Presets */}
-              <div className="pt-2.5 border-t border-slate-100">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5 text-center font-mono">
-                  Akses Cepat (Demo)
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    id="quick-login-admin-btn"
-                    type="button"
-                    onClick={() => quickLoginAs('admin@toko.com', 'admin')}
-                    className="flex items-center justify-center gap-1 p-1.5 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white rounded-md text-[11px] font-bold transition shadow-2xs"
-                  >
-                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                    <span>Admin Toko</span>
-                  </button>
-                  <button
-                    id="quick-login-customer-btn"
-                    type="button"
-                    onClick={() => quickLoginAs('budi@gmail.com', '123')}
-                    className="flex items-center justify-center gap-1 p-1.5 bg-emerald-50 hover:bg-emerald-100 active:scale-98 text-emerald-800 border border-emerald-200 rounded-md text-[11px] font-bold transition shadow-2xs"
-                  >
-                    <UserIcon className="w-3 h-3 text-emerald-600" />
-                    <span>Pelanggan (Budi)</span>
-                  </button>
-                </div>
-              </div>
             </form>
           )}
 

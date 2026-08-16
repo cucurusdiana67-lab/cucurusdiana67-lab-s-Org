@@ -14,7 +14,10 @@ import {
   History, 
   ChevronDown, 
   ChevronUp, 
-  Calendar 
+  Calendar,
+  Trash2,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -37,6 +40,8 @@ export const AdminDebts: React.FC<AdminDebtsProps> = ({
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState<DebtRecord | null>(null);
   const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null);
+  const [debtToDelete, setDebtToDelete] = useState<DebtRecord | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Add Debt Form State
   const [customerName, setCustomerName] = useState('');
@@ -47,6 +52,20 @@ export const AdminDebts: React.FC<AdminDebtsProps> = ({
   // Payment Form State
   const [payAmount, setPayAmount] = useState<number>(0);
   const [payNotes, setPayNotes] = useState('Angsuran hutang');
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleDeleteDebt = () => {
+    if (!debtToDelete) return;
+    const name = debtToDelete.customerName;
+    storage.deleteDebt(debtToDelete.id);
+    onRefreshDebts();
+    setDebtToDelete(null);
+    showToast(`Catatan hutang "${name}" berhasil dihapus.`);
+  };
 
   // Filtered Debts
   const filteredDebts = debts.filter((d) => {
@@ -327,6 +346,16 @@ export const AdminDebts: React.FC<AdminDebtsProps> = ({
                       >
                         {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </button>
+
+                      <button
+                        type="button"
+                        id={`delete-debt-${debt.id}-btn`}
+                        onClick={() => setDebtToDelete(debt)}
+                        className="p-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition border border-red-200"
+                        title="Hapus Catatan Hutang"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -522,6 +551,57 @@ export const AdminDebts: React.FC<AdminDebtsProps> = ({
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Modal Confirmation Delete Debt */}
+      {debtToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="p-5 text-center space-y-3">
+              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Hapus Catatan Hutang?</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Catatan hutang atas nama <span className="font-bold text-slate-800">{debtToDelete.customerName}</span> sebesar <span className="font-bold text-red-600 font-mono">{formatRupiah(debtToDelete.remainingDebt)}</span> akan dihapus permanen.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[11px] text-left text-slate-600 space-y-1">
+                <div>Awal Hutang: <b className="font-mono text-slate-800">{formatRupiah(debtToDelete.originalDebt)}</b></div>
+                {debtToDelete.customerPhone && <div>Telepon: <span className="font-mono text-slate-800">{debtToDelete.customerPhone}</span></div>}
+                {debtToDelete.notes && <div className="italic text-slate-500">"{debtToDelete.notes}"</div>}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  id="confirm-delete-debt-btn"
+                  onClick={handleDeleteDebt}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-700 active:scale-98 text-white rounded-xl text-xs font-bold transition shadow-2xs"
+                >
+                  Ya, Hapus Hutang
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDebtToDelete(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl border border-slate-700 text-xs font-bold flex items-center gap-2 animate-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>
