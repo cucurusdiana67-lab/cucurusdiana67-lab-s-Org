@@ -42,6 +42,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [buyPrice, setBuyPrice] = useState<number>(0);
   const [sellPrice, setSellPrice] = useState<number>(0);
+  const [wholesalePrice, setWholesalePrice] = useState<number>(0);
   const [stock, setStock] = useState<number>(0);
   const [minStock, setMinStock] = useState<number>(5);
   const [unit, setUnit] = useState('Pcs');
@@ -79,6 +80,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     setNewCategoryInput('');
     setBuyPrice(0);
     setSellPrice(0);
+    setWholesalePrice(0);
     setStock(10);
     setMinStock(5);
     setUnit('Pcs');
@@ -94,6 +96,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     setNewCategoryInput('');
     setBuyPrice(p.buyPrice);
     setSellPrice(p.sellPrice);
+    setWholesalePrice(p.wholesalePrice || p.sellPrice);
     setStock(p.stock);
     setMinStock(p.minStock);
     setUnit(p.unit || 'Pcs');
@@ -116,13 +119,17 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     }
 
     const finalCategory = newCategoryInput.trim() || category;
+    const sPrice = Number(sellPrice) || 0;
+    const wPrice = Number(wholesalePrice) > 0 ? Number(wholesalePrice) : sPrice;
+
     const productPayload: Product = {
       id: editingId || 'prod-' + Date.now(),
       barcode: barcode.trim(),
       name: name.trim(),
       category: finalCategory,
       buyPrice: Number(buyPrice) || 0,
-      sellPrice: Number(sellPrice) || 0,
+      sellPrice: sPrice,
+      wholesalePrice: wPrice,
       stock: Number(stock) || 0,
       minStock: Number(minStock) || 5,
       photoUrl: photoUrl.trim(),
@@ -219,8 +226,9 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                 <th className="py-2.5 px-3">Foto</th>
                 <th className="py-2.5 px-3">Nama Barang & Barcode</th>
                 <th className="py-2.5 px-3">Kategori</th>
-                <th className="py-2.5 px-3 text-right">Harga Beli</th>
-                <th className="py-2.5 px-3 text-right">Harga Jual</th>
+                <th className="py-2.5 px-3 text-right">Modal</th>
+                <th className="py-2.5 px-3 text-right">Harga Umum</th>
+                <th className="py-2.5 px-3 text-right">Harga Borongan</th>
                 <th className="py-2.5 px-3 text-right">Laba/Unit</th>
                 <th className="py-2.5 px-3 text-center">Stok</th>
                 <th className="py-2.5 px-3 text-center">Aksi</th>
@@ -229,7 +237,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     Tidak ada data barang yang sesuai dengan filter.
                   </td>
                 </tr>
@@ -265,6 +273,11 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                       </td>
                       <td className="py-2 px-3 text-right font-mono font-extrabold text-emerald-700">
                         {formatRupiah(p.sellPrice)}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-extrabold text-blue-700">
+                        <span className="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded border border-blue-100">
+                          {formatRupiah(p.wholesalePrice || p.sellPrice)}
+                        </span>
                       </td>
                       <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600">
                         +{formatRupiah(margin)}
@@ -402,8 +415,8 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                 </div>
               </div>
 
-              {/* Price: Buy & Sell */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Price: Buy, Sell, and Wholesale */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Harga Beli (Modal)</label>
                   <input
@@ -414,11 +427,11 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                     value={buyPrice || ''}
                     onChange={(e) => setBuyPrice(Number(e.target.value))}
                     placeholder="0"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Harga Jual *</label>
+                  <label className="block font-semibold text-emerald-800 mb-1">Harga Jual Umum *</label>
                   <input
                     id="input-prod-sell-price"
                     type="number"
@@ -427,8 +440,21 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                     value={sellPrice || ''}
                     onChange={(e) => setSellPrice(Number(e.target.value))}
                     placeholder="0"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold text-emerald-700"
+                    className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50/40 rounded-lg text-xs font-bold text-emerald-700 font-mono"
                   />
+                </div>
+                <div>
+                  <label className="block font-semibold text-blue-800 mb-1">Harga Borongan *</label>
+                  <input
+                    id="input-prod-wholesale-price"
+                    type="number"
+                    min="0"
+                    value={wholesalePrice || ''}
+                    onChange={(e) => setWholesalePrice(Number(e.target.value))}
+                    placeholder={String(sellPrice || 0)}
+                    className="w-full px-3 py-2 border border-blue-300 bg-blue-50/40 rounded-lg text-xs font-bold text-blue-700 font-mono"
+                  />
+                  <p className="text-[10px] text-blue-600 mt-0.5">Untuk pembeli borongan</p>
                 </div>
               </div>
 

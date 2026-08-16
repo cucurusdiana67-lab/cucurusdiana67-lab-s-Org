@@ -86,16 +86,16 @@ export default function App() {
   }, [products]);
 
   // Handle Add to Cart
-  const handleAddToCart = (product: Product, quantity: number) => {
+  const handleAddToCart = (product: Product, quantity: number, customPrice?: number) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         const newQty = Math.min(product.stock, existing.quantity + quantity);
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: newQty } : item
+          item.product.id === product.id ? { ...item, quantity: newQty, customPrice: customPrice ?? item.customPrice } : item
         );
       }
-      return [...prev, { product, quantity: Math.min(product.stock, quantity) }];
+      return [...prev, { product, quantity: Math.min(product.stock, quantity), customPrice }];
     });
   };
 
@@ -170,6 +170,7 @@ export default function App() {
             products={products}
             settings={settings}
             cart={cart}
+            currentUser={currentUser}
             onAddToCart={handleAddToCart}
             onOpenCart={() => setActiveTab('cart')}
             isLoggedIn={!!currentUser}

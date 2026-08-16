@@ -48,14 +48,18 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL DEFAULT 'customer', -- 'admin' | 'customer'
+  customer_type TEXT NOT NULL DEFAULT 'general', -- 'general' | 'wholesale'
   phone TEXT,
   address TEXT,
   password_hash TEXT,
+  password TEXT,
+  status TEXT DEFAULT 'approved',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_customer_type ON users(customer_type);
 
 -- 3. TABEL KATEGORI PRODUK (NORMALISASI RELASIONAL)
 CREATE TABLE IF NOT EXISTS categories (
@@ -73,6 +77,7 @@ CREATE TABLE IF NOT EXISTS products (
   category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
   buy_price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (buy_price >= 0),
   sell_price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (sell_price >= 0),
+  wholesale_price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (wholesale_price >= 0),
   stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
   min_stock INTEGER NOT NULL DEFAULT 5 CHECK (min_stock >= 0),
   photo_url TEXT,
@@ -96,6 +101,7 @@ CREATE TABLE IF NOT EXISTS orders (
   customer_name TEXT NOT NULL,
   customer_phone TEXT,
   customer_address TEXT,
+  customer_type TEXT DEFAULT 'general', -- 'general' | 'wholesale'
   items JSONB NOT NULL DEFAULT '[]'::jsonb, -- Cache item terarsip
   subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0,
   total_discount NUMERIC(12, 2) NOT NULL DEFAULT 0,

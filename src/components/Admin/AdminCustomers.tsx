@@ -46,6 +46,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
     phone: '',
     address: '',
     password: '',
+    customerType: 'general' as 'general' | 'wholesale',
     status: 'approved' as CustomerStatus,
   });
   const [formError, setFormError] = useState<string | null>(null);
@@ -107,6 +108,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
       phone: '',
       address: '',
       password: '',
+      customerType: 'general',
       status: 'approved',
     });
     setFormError(null);
@@ -121,6 +123,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
       phone: customer.phone || '',
       address: customer.address || '',
       password: customer.password || '',
+      customerType: customer.customerType || 'general',
       status: customer.status || 'pending',
     });
     setFormError(null);
@@ -160,6 +163,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
         phone: formData.phone.trim() || undefined,
         address: formData.address.trim() || undefined,
         password: formData.password.trim() || editingCustomer.password || '123',
+        customerType: formData.customerType,
         status: formData.status,
       };
       storage.saveUser(updated);
@@ -173,11 +177,12 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
         address: formData.address.trim() || settings.storeAddress,
         password: formData.password.trim(),
         role: 'customer',
+        customerType: formData.customerType,
         status: formData.status,
         createdAt: new Date().toISOString(),
       };
       storage.saveUser(newCustomer);
-      showToast(`Pelanggan baru "${newCustomer.name}" berhasil ditambahkan.`);
+      showToast(`Pelanggan baru "${newCustomer.name}" (${newCustomer.customerType === 'wholesale' ? 'Borongan' : 'Umum'}) berhasil ditambahkan.`);
     }
 
     refreshList();
@@ -446,8 +451,18 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
                       </div>
                     </div>
 
-                    {/* Status Badge */}
-                    <div className="shrink-0">
+                    {/* Status & Customer Type Badge */}
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      {customer.customerType === 'wholesale' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-900 border border-blue-300">
+                          <span>Borongan / Grosir</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                          <span>Umum (Eceran)</span>
+                        </span>
+                      )}
+
                       {isApproved && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
                           <Check className="w-3 h-3 text-emerald-600" />
@@ -686,6 +701,44 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
                   placeholder="Jl. Melati No. 15, RT 02/05..."
                   className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
+              </div>
+
+              {/* Jenis Pelanggan Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Jenis Pelanggan (Penentuan Harga Saat Login)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, customerType: 'general' })}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold flex flex-col items-start border transition ${
+                      formData.customerType === 'general'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="font-extrabold">Pelanggan Umum</span>
+                    <span className={`text-[10px] font-normal mt-0.5 ${formData.customerType === 'general' ? 'text-slate-300' : 'text-slate-500'}`}>
+                      Mendapatkan Harga Jual Eceran
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, customerType: 'wholesale' })}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold flex flex-col items-start border transition ${
+                      formData.customerType === 'wholesale'
+                        ? 'bg-blue-700 text-white border-blue-700 shadow-2xs'
+                        : 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
+                    }`}
+                  >
+                    <span className="font-extrabold">Pelanggan Borongan</span>
+                    <span className={`text-[10px] font-normal mt-0.5 ${formData.customerType === 'wholesale' ? 'text-blue-200' : 'text-blue-600'}`}>
+                      Mendapatkan Harga Borongan
+                    </span>
+                  </button>
+                </div>
               </div>
 
               {/* Status Persetujuan Selector */}

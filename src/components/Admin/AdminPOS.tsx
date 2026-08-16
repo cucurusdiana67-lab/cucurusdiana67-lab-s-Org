@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Order, StoreSettings, CartItem, PaymentMethod } from '../../types';
+import { Product, Order, StoreSettings, CartItem, PaymentMethod, User, CustomerType } from '../../types';
 import { storage } from '../../lib/storage';
 import { formatImageUrl, formatRupiah } from '../../lib/imageHelper';
 import { printThermalReceipt, copyOrderToWhatsApp } from '../../lib/receiptPrinter';
@@ -28,7 +28,8 @@ import {
   Calendar,
   X,
   PackageCheck,
-  Phone
+  Phone,
+  Tag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -48,6 +49,13 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   
+  // Buyer & Pricing Type state
+  const [customerType, setCustomerType] = useState<CustomerType>('general');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [registeredCustomers, setRegisteredCustomers] = useState<User[]>(() => 
+    storage.getUsers().filter((u) => u.role === 'customer')
+  );
+
   // Checkout POS state
   const [customerName, setCustomerName] = useState('Pelanggan Umum');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -78,12 +86,56 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const [restoreStockOnDelete, setRestoreStockOnDelete] = useState(true);
 
+  // Refresh customer list if changed
+  useEffect(() => {
+    setRegisteredCustomers(storage.getUsers().filter((u) => u.role === 'customer'));
+  }, []);
+
   const refreshOrders = () => {
     const list = storage.getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setRecentOrders(list);
+    setRegisteredCustomers(storage.getUsers().filter((u) => u.role === 'customer'));
   };
 
   const categories = ['Semua', ...Array.from(new Set(products.map((p) => p.category)))];
+
+  // Helper to determine price based on customer type
+  const getProductPrice = (product: Product, type: CustomerType) => {
+    if (type === 'wholesale' && product.wholesalePrice > 0) {
+      return product.wholesalePrice;
+    }
+    return product.sellPrice;
+  };
+
+  // Switch customer type and update all cart items' prices
+  const handleCustomerTypeChange = (newType: CustomerType) => {
+    setCustomerType(newType);
+    setPosCart((prev) =>
+      prev.map((item) => ({
+        ...item,
+        customPrice: getProductPrice(item.product, newType),
+      }))
+    );
+  };
+
+  // Handle selecting a registered customer
+  const handleSelectRegisteredCustomer = (customerId: string) => {
+    setSelectedCustomerId(customerId);
+    if (!customerId) {
+      setCustomerName('Pelanggan Umum');
+      setCustomerPhone('');
+      handleCustomerTypeChange('general');
+      return;
+    }
+
+    const cust = registeredCustomers.find((c) => c.id === customerId);
+    if (cust) {
+      setCustomerName(cust.name);
+      setCustomerPhone(cust.phone || '');
+      const type = cust.customerType === 'wholesale' ? 'wholesale' : 'general';
+      handleCustomerTypeChange(type);
+    }
+  };
 
   // Filter products for quick search & add
   const filteredProducts = products.filter((p) => {
@@ -96,7 +148,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   });
 
   // Calculate totals
-  const subtotal = posCart.reduce((sum, item) => sum + (item.customPrice ?? item.product.sellPrice) * item.quantity, 0);
+  const subtotal = posCart.reduce((sum, item) => sum + (item.customPrice ?? getProductPrice(item.product, customerType)) * item.quantity, 0);
   const totalBuyCost = posCart.reduce((sum, item) => sum + item.product.buyPrice * item.quantity, 0);
   const finalTotal = Math.max(0, subtotal - globalDiscount);
   const profit = Math.max(0, finalTotal - totalBuyCost);
@@ -127,6 +179,8 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
       return;
     }
 
+    const itemPrice = getProductPrice(product, customerType);
+
     setPosCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -135,10 +189,10 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
           return prev;
         }
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.product.id === product.id ? { ...item, quantity: item.quantity + 1, customPrice: itemPrice } : item
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { product, quantity: 1, customPrice: itemPrice }];
     });
   };
 
@@ -193,18 +247,22 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
       id: 'ord-pos-' + Date.now(),
       orderNumber,
       type: 'pos',
+      customerId: selectedCustomerId || undefined,
       customerName: customerName.trim() || 'Pelanggan Umum',
       customerPhone: customerPhone.trim(),
-      items: posCart.map((item) => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        barcode: item.product.barcode,
-        category: item.product.category,
-        buyPrice: item.product.buyPrice,
-        sellPrice: item.customPrice ?? item.product.sellPrice,
-        quantity: item.quantity,
-        subtotal: (item.customPrice ?? item.product.sellPrice) * item.quantity,
-      })),
+      items: posCart.map((item) => {
+        const itemPrice = item.customPrice ?? getProductPrice(item.product, customerType);
+        return {
+          productId: item.product.id,
+          productName: item.product.name,
+          barcode: item.product.barcode,
+          category: item.product.category,
+          buyPrice: item.product.buyPrice,
+          sellPrice: itemPrice,
+          quantity: item.quantity,
+          subtotal: itemPrice * item.quantity,
+        };
+      }),
       subtotal,
       totalDiscount: globalDiscount,
       totalAmount: finalTotal,
@@ -234,6 +292,8 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
     setNotes('');
     setCustomerName('Pelanggan Umum');
     setCustomerPhone('');
+    setSelectedCustomerId('');
+    setCustomerType('general');
 
     try {
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
@@ -359,6 +419,9 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[580px] overflow-y-auto pr-1">
             {filteredProducts.map((p) => {
               const isOut = p.stock <= 0;
+              const activePrice = getProductPrice(p, customerType);
+              const isWholesaleActive = customerType === 'wholesale';
+              const hasWholesaleDiscount = isWholesaleActive && p.wholesalePrice > 0 && p.wholesalePrice < p.sellPrice;
               return (
                 <button
                   key={p.id}
@@ -369,6 +432,8 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                   className={`text-left bg-white rounded-xl border p-2 transition flex flex-col justify-between group shadow-2xs ${
                     isOut
                       ? 'opacity-40 bg-slate-100 cursor-not-allowed border-slate-200'
+                      : isWholesaleActive
+                      ? 'hover:border-blue-500 hover:shadow-xs border-slate-200/90 active:scale-98'
                       : 'hover:border-emerald-500 hover:shadow-xs border-slate-200/90 active:scale-98'
                   }`}
                 >
@@ -384,14 +449,28 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                       <h4 className="font-bold text-slate-900 text-xs line-clamp-2 leading-tight group-hover:text-emerald-700">
                         {p.name}
                       </h4>
-                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">{p.category}</div>
+                      <div className="flex items-center gap-1 mt-0.5 truncate">
+                        <span className="text-[10px] text-slate-400">{p.category}</span>
+                        {isWholesaleActive && p.wholesalePrice > 0 && (
+                          <span className="text-[8.5px] font-extrabold bg-blue-100 text-blue-800 px-1 py-0.1 rounded">
+                            Borongan
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1">
-                    <span className="font-bold text-xs text-emerald-700 font-mono">
-                      {formatRupiah(p.sellPrice)}
-                    </span>
+                    <div>
+                      <span className={`font-bold text-xs font-mono ${isWholesaleActive ? 'text-blue-700' : 'text-emerald-700'}`}>
+                        {formatRupiah(activePrice)}
+                      </span>
+                      {hasWholesaleDiscount && (
+                        <div className="text-[9px] text-slate-400 font-mono line-through">
+                          {formatRupiah(p.sellPrice)}
+                        </div>
+                      )}
+                    </div>
                     <span
                       className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
                         p.stock <= p.minStock
@@ -437,6 +516,73 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
               )}
             </div>
 
+            {/* Buyer Type & Customer Selection Box */}
+            <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Jenis Pembeli & Harga:</span>
+                </label>
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  customerType === 'wholesale'
+                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                }`}>
+                  {customerType === 'wholesale' ? 'Harga Borongan' : 'Harga Jual Umum'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  id="pos-buyer-type-general"
+                  type="button"
+                  onClick={() => handleCustomerTypeChange('general')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition ${
+                    customerType === 'general'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <UserIcon className="w-3.5 h-3.5" />
+                  <span>Umum (Harga Jual)</span>
+                </button>
+
+                <button
+                  id="pos-buyer-type-wholesale"
+                  type="button"
+                  onClick={() => handleCustomerTypeChange('wholesale')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition ${
+                    customerType === 'wholesale'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Borongan (Harga Borongan)</span>
+                </button>
+              </div>
+
+              {/* Select from registered customers */}
+              <div>
+                <label className="block text-[10.5px] font-semibold text-slate-600 mb-1">
+                  Pilih Pelanggan Terdaftar (Opsional):
+                </label>
+                <select
+                  id="pos-customer-select"
+                  value={selectedCustomerId}
+                  onChange={(e) => handleSelectRegisteredCustomer(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="">-- Pelanggan Bebas / Non-Member --</option>
+                  {registeredCustomers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.customerType === 'wholesale' ? 'Borongan' : 'Umum'}) {c.phone ? `- ${c.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Cart Items List */}
             <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
               {posCart.length === 0 ? (
@@ -444,53 +590,61 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                   Klik barang di sebelah kiri atau scan barcode untuk transaksi.
                 </div>
               ) : (
-                posCart.map((item) => (
-                  <div
-                    key={item.product.id}
-                    className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2 text-xs"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-slate-900 truncate">
-                        {item.product.name}
+                posCart.map((item) => {
+                  const itemPrice = item.customPrice ?? getProductPrice(item.product, customerType);
+                  return (
+                    <div
+                      key={item.product.id}
+                      className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900 truncate flex items-center gap-1">
+                          <span>{item.product.name}</span>
+                          {customerType === 'wholesale' && item.product.wholesalePrice > 0 && (
+                            <span className="text-[8.5px] font-bold bg-blue-100 text-blue-800 px-1 py-0.2 rounded">
+                              Borongan
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-slate-500 text-[10px] font-mono">
+                          {formatRupiah(itemPrice)} x {item.quantity}
+                        </div>
                       </div>
-                      <div className="text-slate-500 text-[10px] font-mono">
-                        {formatRupiah(item.customPrice ?? item.product.sellPrice)} x {item.quantity}
-                      </div>
-                    </div>
 
-                    {/* Qty button */}
-                    <div className="flex items-center border border-slate-300 rounded bg-white overflow-hidden shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(item.product.id, item.quantity - 1)}
-                        className="px-1.5 py-0.5 hover:bg-slate-100 text-slate-700 font-bold"
-                      >
-                        -
-                      </button>
-                      <span className="w-5 text-center font-bold font-mono text-xs">{item.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(item.product.id, item.quantity + 1)}
-                        className="px-1.5 py-0.5 hover:bg-slate-100 text-slate-700 font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-
-                    <div className="text-right min-w-[70px]">
-                      <div className="font-extrabold text-slate-900 font-mono text-xs">
-                        {formatRupiah((item.customPrice ?? item.product.sellPrice) * item.quantity)}
+                      {/* Qty button */}
+                      <div className="flex items-center border border-slate-300 rounded bg-white overflow-hidden shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.product.id, item.quantity - 1)}
+                          className="px-1.5 py-0.5 hover:bg-slate-100 text-slate-700 font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="w-5 text-center font-bold font-mono text-xs">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.product.id, item.quantity + 1)}
+                          className="px-1.5 py-0.5 hover:bg-slate-100 text-slate-700 font-bold"
+                        >
+                          +
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(item.product.id)}
-                        className="text-red-500 hover:text-red-700 text-[10px] font-semibold"
-                      >
-                        Hapus
-                      </button>
+
+                      <div className="text-right min-w-[70px]">
+                        <div className="font-extrabold text-slate-900 font-mono text-xs">
+                          {formatRupiah(itemPrice * item.quantity)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(item.product.id)}
+                          className="text-red-500 hover:text-red-700 text-[10px] font-semibold"
+                        >
+                          Hapus
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -508,16 +662,27 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Diskon / Potongan (Rp)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">No. HP / WA Pembeli</label>
                   <input
-                    type="number"
-                    min="0"
-                    value={globalDiscount || ''}
-                    onChange={(e) => setGlobalDiscount(Number(e.target.value))}
-                    placeholder="0"
+                    type="text"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="081234567890"
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Diskon / Potongan Transaksi (Rp)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={globalDiscount || ''}
+                  onChange={(e) => setGlobalDiscount(Number(e.target.value))}
+                  placeholder="0"
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-1 focus:ring-emerald-500"
+                />
               </div>
 
               {/* Payment Method Selector */}

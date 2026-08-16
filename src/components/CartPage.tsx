@@ -63,7 +63,15 @@ export const CartPage: React.FC<CartPageProps> = ({
     }
   }, [currentUser]);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.product.sellPrice * item.quantity, 0);
+  const isWholesale = currentUser?.customerType === 'wholesale';
+
+  const getItemUnitPrice = (item: CartItem) => {
+    if (item.customPrice !== undefined) return item.customPrice;
+    if (isWholesale && item.product.wholesalePrice > 0) return item.product.wholesalePrice;
+    return item.product.sellPrice;
+  };
+
+  const subtotal = cart.reduce((sum, item) => sum + getItemUnitPrice(item) * item.quantity, 0);
   const totalBuyCost = cart.reduce((sum, item) => sum + item.product.buyPrice * item.quantity, 0);
   const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const profit = subtotal - totalBuyCost;
@@ -101,16 +109,19 @@ export const CartPage: React.FC<CartPageProps> = ({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       customerAddress: customerAddress.trim(),
-      items: cart.map((item) => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        barcode: item.product.barcode,
-        category: item.product.category,
-        buyPrice: item.product.buyPrice,
-        sellPrice: item.product.sellPrice,
-        quantity: item.quantity,
-        subtotal: item.product.sellPrice * item.quantity,
-      })),
+      items: cart.map((item) => {
+        const unitPrice = getItemUnitPrice(item);
+        return {
+          productId: item.product.id,
+          productName: item.product.name,
+          barcode: item.product.barcode,
+          category: item.product.category,
+          buyPrice: item.product.buyPrice,
+          sellPrice: unitPrice,
+          quantity: item.quantity,
+          subtotal: unitPrice * item.quantity,
+        };
+      }),
       subtotal,
       totalDiscount: 0,
       totalAmount: subtotal,
@@ -347,14 +358,21 @@ export const CartPage: React.FC<CartPageProps> = ({
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-mono">
-                  {item.product.category}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-mono">
+                    {item.product.category}
+                  </span>
+                  {isWholesale && item.product.wholesalePrice > 0 && (
+                    <span className="text-[8.5px] font-black bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
+                      Borongan
+                    </span>
+                  )}
+                </div>
                 <h4 className="font-bold text-slate-900 text-xs truncate mt-0.5">
                   {item.product.name}
                 </h4>
                 <div className="text-[11px] text-slate-500 font-mono">
-                  {formatRupiah(item.product.sellPrice)} / {item.product.unit || 'pcs'}
+                  {formatRupiah(getItemUnitPrice(item))} / {item.product.unit || 'pcs'}
                 </div>
               </div>
 
@@ -383,7 +401,7 @@ export const CartPage: React.FC<CartPageProps> = ({
               {/* Item Subtotal & Delete */}
               <div className="text-right shrink-0">
                 <div className="text-xs font-extrabold font-mono text-slate-900">
-                  {formatRupiah(item.product.sellPrice * item.quantity)}
+                  {formatRupiah(getItemUnitPrice(item) * item.quantity)}
                 </div>
                 <button
                   type="button"

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Product } from '../types';
+import { Product, User } from '../types';
 import { formatImageUrl, formatRupiah } from '../lib/imageHelper';
 import { ShoppingCart, Plus, Minus, Check, AlertTriangle } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
-  onAddToCart: (product: Product, quantity: number) => void;
+  onAddToCart: (product: Product, quantity: number, customPrice?: number) => void;
   isLoggedIn: boolean;
+  currentUser?: User | null;
   onRequestLogin: () => void;
 }
 
@@ -14,6 +15,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onAddToCart,
   isLoggedIn,
+  currentUser,
   onRequestLogin,
 }) => {
   const [qty, setQty] = useState(1);
@@ -22,10 +24,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isOutOfStock = product.stock <= 0;
   const isLowStock = product.stock > 0 && product.stock <= product.minStock;
 
+  const isWholesale = currentUser?.customerType === 'wholesale';
+  const activePrice = isWholesale && product.wholesalePrice > 0 ? product.wholesalePrice : product.sellPrice;
+  const hasWholesaleDiscount = isWholesale && product.wholesalePrice > 0 && product.wholesalePrice < product.sellPrice;
+
   const handleAdd = () => {
     if (isOutOfStock) return;
 
-    onAddToCart(product, qty);
+    onAddToCart(product, qty, activePrice);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1200);
   };
@@ -74,14 +80,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       {/* Product Details */}
       <div className="p-3 flex-1 flex flex-col justify-between space-y-2.5">
         <div>
-          <h3 className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-emerald-700 transition">
-            {product.name}
-          </h3>
-          <div className="mt-1 flex items-baseline justify-between gap-1">
-            <span className="text-sm sm:text-base font-extrabold text-emerald-700 font-mono tracking-tight">
-              {formatRupiah(product.sellPrice)}
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">/{product.unit || 'pcs'}</span>
+          <div className="flex items-start justify-between gap-1 mb-1">
+            <h3 className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-emerald-700 transition">
+              {product.name}
+            </h3>
+          </div>
+
+          {/* Pricing Box based on Customer Type */}
+          <div className="mt-1 space-y-0.5">
+            {isWholesale ? (
+              <div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-sm sm:text-base font-extrabold text-blue-700 font-mono tracking-tight">
+                    {formatRupiah(activePrice)}
+                  </span>
+                  <span className="text-[9px] font-extrabold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
+                    Harga Borongan
+                  </span>
+                </div>
+                {hasWholesaleDiscount && (
+                  <div className="text-[10px] text-slate-400 font-mono line-through">
+                    Umum: {formatRupiah(product.sellPrice)}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-baseline justify-between gap-1">
+                <span className="text-sm sm:text-base font-extrabold text-emerald-700 font-mono tracking-tight">
+                  {formatRupiah(product.sellPrice)}
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">/{product.unit || 'pcs'}</span>
+              </div>
+            )}
           </div>
         </div>
 

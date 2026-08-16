@@ -34,6 +34,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Sembako',
     buyPrice: 65000,
     sellPrice: 75000,
+    wholesalePrice: 71000,
     stock: 24,
     minStock: 5,
     photoUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80',
@@ -48,6 +49,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Sembako',
     buyPrice: 32000,
     sellPrice: 36000,
+    wholesalePrice: 34000,
     stock: 18,
     minStock: 6,
     photoUrl: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=600&auto=format&fit=crop&q=80',
@@ -62,6 +64,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Sembako',
     buyPrice: 15500,
     sellPrice: 18000,
+    wholesalePrice: 16800,
     stock: 30,
     minStock: 8,
     photoUrl: 'https://images.unsplash.com/photo-1581441363689-1f3c3c414635?w=600&auto=format&fit=crop&q=80',
@@ -76,6 +79,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Makanan Ringan',
     buyPrice: 110000,
     sellPrice: 122000,
+    wholesalePrice: 116000,
     stock: 12,
     minStock: 4,
     photoUrl: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=600&auto=format&fit=crop&q=80',
@@ -90,6 +94,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Makanan Ringan',
     buyPrice: 2800,
     sellPrice: 3500,
+    wholesalePrice: 3000,
     stock: 3, // Low stock for test bon belanja
     minStock: 20,
     photoUrl: 'https://images.unsplash.com/photo-1612927601601-6638404737ce?w=600&auto=format&fit=crop&q=80',
@@ -104,6 +109,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Minuman',
     buyPrice: 13500,
     sellPrice: 16000,
+    wholesalePrice: 14800,
     stock: 15,
     minStock: 5,
     photoUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
@@ -118,6 +124,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Minuman',
     buyPrice: 10500,
     sellPrice: 12500,
+    wholesalePrice: 11700,
     stock: 2, // Low stock
     minStock: 10,
     photoUrl: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=600&auto=format&fit=crop&q=80',
@@ -132,6 +139,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Minuman',
     buyPrice: 6500,
     sellPrice: 8500,
+    wholesalePrice: 7500,
     stock: 20,
     minStock: 5,
     photoUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80',
@@ -146,6 +154,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Perlengkapan Rumah',
     buyPrice: 14000,
     sellPrice: 16500,
+    wholesalePrice: 15200,
     stock: 14,
     minStock: 5,
     photoUrl: 'https://images.unsplash.com/photo-1585421514738-01798e348b17?w=600&auto=format&fit=crop&q=80',
@@ -160,6 +169,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Perlengkapan Rumah',
     buyPrice: 19500,
     sellPrice: 23000,
+    wholesalePrice: 21500,
     stock: 1, // Low stock
     minStock: 8,
     photoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
@@ -174,6 +184,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Sembako',
     buyPrice: 11000,
     sellPrice: 13000,
+    wholesalePrice: 12200,
     stock: 22,
     minStock: 6,
     photoUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
@@ -188,6 +199,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     category: 'Bumbu Dapur',
     buyPrice: 14500,
     sellPrice: 17500,
+    wholesalePrice: 16000,
     stock: 16,
     minStock: 5,
     photoUrl: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=600&auto=format&fit=crop&q=80',
@@ -203,6 +215,7 @@ export const INITIAL_USERS: User[] = [
     name: 'Pemilik Toko (Admin)',
     email: 'admin@toko.com',
     role: 'admin',
+    customerType: 'general',
     phone: '081298765432',
     password: 'admin',
     status: 'approved',
@@ -226,12 +239,47 @@ class StorageService {
   private lastSyncTimestamp: string | null = null;
   private isSyncing = false;
   private listeners: Array<() => void> = [];
+  private realtimeChannel: any = null;
+  private broadcastChannel: any = null;
 
   constructor() {
     this.initLocalData();
+    this.setupBroadcastChannel();
     this.setupRealtime();
     // Automatically pull latest data from Supabase in the background
     this.pullAllDataFromSupabase(true).catch(() => {});
+
+    // Periodic automatic background sync every 6 seconds
+    if (typeof window !== 'undefined') {
+      setInterval(() => {
+        this.pullAllDataFromSupabase(true).catch(() => {});
+      }, 6000);
+
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.pullAllDataFromSupabase(true).catch(() => {});
+        }
+      });
+
+      window.addEventListener('focus', () => {
+        this.pullAllDataFromSupabase(true).catch(() => {});
+      });
+    }
+  }
+
+  private setupBroadcastChannel() {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.broadcastChannel = new BroadcastChannel('toko_pos_sync_channel');
+        this.broadcastChannel.onmessage = (event: MessageEvent) => {
+          if (event.data && event.data.type === 'sync') {
+            this.notifyLocalListenersOnly();
+          }
+        };
+      } catch {
+        // ignore
+      }
+    }
   }
 
   subscribe(listener: () => void): () => void {
@@ -241,7 +289,7 @@ class StorageService {
     };
   }
 
-  notifyListeners(): void {
+  private notifyLocalListenersOnly(): void {
     this.listeners.forEach((fn) => {
       try {
         fn();
@@ -251,6 +299,28 @@ class StorageService {
     });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('app_storage_synced'));
+    }
+  }
+
+  notifyListeners(broadcastRemote: boolean = false): void {
+    this.notifyLocalListenersOnly();
+
+    // Broadcast across browser tabs
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({ type: 'sync', time: Date.now() });
+      } catch {}
+    }
+
+    // Broadcast to other devices via Supabase Realtime Channel
+    if (broadcastRemote && this.realtimeChannel) {
+      try {
+        this.realtimeChannel.send({
+          type: 'broadcast',
+          event: 'db_mutation',
+          payload: { timestamp: Date.now() },
+        });
+      } catch {}
     }
   }
 
@@ -309,20 +379,24 @@ class StorageService {
     }
   }
 
-  // --- Realtime WebSocket Synchronization ---
+  // --- Realtime WebSocket & Broadcast Synchronization ---
   private setupRealtime() {
     try {
-      supabase
-        .channel('public:db-realtime-sync')
+      this.realtimeChannel = supabase.channel('toko-realtime-sync-v3');
+      this.realtimeChannel
         .on(
           'postgres_changes',
           { event: '*', schema: 'public' },
-          async (payload) => {
-            console.log('Realtime change from Supabase:', payload.table, payload.eventType);
+          async (payload: any) => {
+            console.log('Realtime postgres_changes detected:', payload?.table, payload?.eventType);
             await this.pullAllDataFromSupabase(true);
           }
         )
-        .subscribe((status) => {
+        .on('broadcast', { event: 'db_mutation' }, async (payload: any) => {
+          console.log('Realtime broadcast mutation detected from another device:', payload);
+          await this.pullAllDataFromSupabase(true);
+        })
+        .subscribe((status: string) => {
           if (status === 'SUBSCRIBED') {
             this.isSupabaseOnline = true;
           }
@@ -378,6 +452,7 @@ class StorageService {
           category: p.category,
           buyPrice: Number(p.buy_price ?? p.buyPrice ?? 0),
           sellPrice: Number(p.sell_price ?? p.sellPrice ?? 0),
+          wholesalePrice: Number(p.wholesale_price ?? p.wholesalePrice ?? p.sell_price ?? p.sellPrice ?? 0),
           stock: Number(p.stock ?? 0),
           minStock: Number(p.min_stock ?? p.minStock ?? 5),
           photoUrl: p.photo_url || p.photoUrl || '',
@@ -391,24 +466,38 @@ class StorageService {
         localStorage.setItem('has_synced_cloud', 'true');
       }
 
-      // 3. Fetch Users (Admins and Customers)
+      // 3. Fetch Users (Admins and Customers) with Safe Password Preservation
       const { data: remoteUsers, error: userErr } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: true });
 
       if (!userErr && remoteUsers && remoteUsers.length > 0) {
-        const mappedUsers: User[] = remoteUsers.map((u: any) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role || 'customer',
-          phone: u.phone || '',
-          address: u.address || '',
-          password: u.password || u.password_hash || 'admin',
-          status: u.status || (u.role === 'admin' ? 'approved' : 'pending'),
-          createdAt: u.created_at || u.createdAt || new Date().toISOString(),
-        }));
+        const localUsers = this.getUsers();
+        const mappedUsers: User[] = remoteUsers.map((u: any) => {
+          const matchedLocal = localUsers.find(
+            (lu) => lu.id === u.id || lu.email.toLowerCase() === u.email.toLowerCase()
+          );
+          // Preserve local password if remote password_hash is not set or empty
+          const remotePassword = u.password || u.password_hash;
+          const finalPassword =
+            remotePassword && remotePassword.trim() !== ''
+              ? remotePassword
+              : matchedLocal?.password || (u.role === 'admin' ? 'admin' : '123456');
+
+          return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role || 'customer',
+            customerType: u.customer_type || u.customerType || matchedLocal?.customerType || 'general',
+            phone: u.phone || '',
+            address: u.address || '',
+            password: finalPassword,
+            status: u.status || (u.role === 'admin' ? 'approved' : 'pending'),
+            createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+          };
+        });
         localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mappedUsers));
 
         // If current logged-in user changed/updated remotely, update active session
@@ -436,6 +525,7 @@ class StorageService {
           customerName: o.customer_name || o.customerName,
           customerPhone: o.customer_phone || o.customerPhone,
           customerAddress: o.customer_address || o.customerAddress,
+          customerType: o.customer_type || o.customerType || 'general',
           items: typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []),
           subtotal: Number(o.subtotal || 0),
           totalDiscount: Number(o.total_discount ?? o.totalDiscount ?? 0),
@@ -499,7 +589,7 @@ class StorageService {
 
       this.isSupabaseOnline = true;
       this.lastSyncTimestamp = new Date().toISOString();
-      this.notifyListeners();
+      this.notifyListeners(false);
 
       const prodCount = remoteProducts ? remoteProducts.length : 0;
       const userCount = remoteUsers ? remoteUsers.length : 0;
@@ -531,7 +621,7 @@ class StorageService {
 
   saveSettings(settings: StoreSettings): void {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-    this.notifyListeners();
+    this.notifyListeners(true);
     // Asynchronously update supabase
     safeAsync(
       supabase.from('store_settings').upsert({
@@ -565,8 +655,9 @@ class StorageService {
   saveProduct(product: Product): Product {
     const products = this.getProducts();
     const index = products.findIndex((p) => p.id === product.id);
-    const updated = {
+    const updated: Product = {
       ...product,
+      wholesalePrice: Number(product.wholesalePrice ?? product.sellPrice ?? 0),
       updatedAt: new Date().toISOString(),
     };
 
@@ -577,7 +668,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     // Low egress upsert to Supabase
     safeAsync(
@@ -588,6 +679,7 @@ class StorageService {
         category: updated.category,
         buy_price: updated.buyPrice,
         sell_price: updated.sellPrice,
+        wholesale_price: updated.wholesalePrice,
         stock: updated.stock,
         min_stock: updated.minStock,
         photo_url: updated.photoUrl,
@@ -603,7 +695,7 @@ class StorageService {
   deleteProduct(id: string): void {
     const products = this.getProducts().filter((p) => p.id !== id);
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-    this.notifyListeners();
+    this.notifyListeners(true);
     safeAsync(supabase.from('products').delete().eq('id', id));
   }
 
@@ -615,7 +707,7 @@ class StorageService {
     item.stock = Math.max(0, item.stock - quantityToDeduct);
     item.updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     safeAsync(
       supabase.from('products').update({
@@ -634,6 +726,7 @@ class StorageService {
       const list: User[] = raw ? JSON.parse(raw) : INITIAL_USERS;
       return list.map((u) => ({
         ...u,
+        customerType: u.customerType || 'general',
         status: u.status || (u.role === 'admin' ? 'approved' : 'approved'),
       }));
     } catch {
@@ -656,12 +749,13 @@ class StorageService {
     } else {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     }
-    this.notifyListeners();
+    this.notifyListeners(false);
   }
 
   saveUser(user: User): User {
     const userToSave: User = {
       ...user,
+      customerType: user.customerType || 'general',
       status: user.status || (user.role === 'admin' ? 'approved' : 'pending'),
     };
     const users = this.getUsers();
@@ -672,7 +766,7 @@ class StorageService {
       users.push(userToSave);
     }
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     safeAsync(
       supabase.from('users').upsert({
@@ -680,6 +774,7 @@ class StorageService {
         name: userToSave.name,
         email: userToSave.email,
         role: userToSave.role,
+        customer_type: userToSave.customerType || 'general',
         phone: userToSave.phone || null,
         address: userToSave.address || null,
         password_hash: userToSave.password || null,
@@ -704,7 +799,7 @@ class StorageService {
     if (current && current.id === userId) {
       this.setCurrentUser({ ...current, status });
     } else {
-      this.notifyListeners();
+      this.notifyListeners(true);
     }
 
     safeAsync(
@@ -780,7 +875,7 @@ class StorageService {
       });
     }
 
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     // Sync to Supabase
     safeAsync(
@@ -792,6 +887,7 @@ class StorageService {
         customer_name: order.customerName,
         customer_phone: order.customerPhone,
         customer_address: order.customerAddress,
+        customer_type: order.customerType || 'general',
         items: order.items,
         subtotal: order.subtotal,
         total_discount: order.totalDiscount,
@@ -816,13 +912,14 @@ class StorageService {
     if (index >= 0) {
       orders[index] = updatedOrder;
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-      this.notifyListeners();
+      this.notifyListeners(true);
 
       safeAsync(
         supabase.from('orders').update({
           customer_name: updatedOrder.customerName,
           customer_phone: updatedOrder.customerPhone,
           customer_address: updatedOrder.customerAddress,
+          customer_type: updatedOrder.customerType || 'general',
           payment_method: updatedOrder.paymentMethod,
           amount_paid: updatedOrder.amountPaid,
           remaining_debt: updatedOrder.remainingDebt,
@@ -860,7 +957,7 @@ class StorageService {
 
     const filtered = orders.filter((o) => o.id !== orderId);
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(filtered));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     safeAsync(supabase.from('orders').delete().eq('id', orderId));
     return true;
@@ -872,7 +969,7 @@ class StorageService {
     if (order) {
       order.status = status;
       localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-      this.notifyListeners();
+      this.notifyListeners(true);
       safeAsync(supabase.from('orders').update({ status }).eq('id', orderId));
     }
   }
@@ -892,7 +989,7 @@ class StorageService {
     const debts = this.getDebts();
     debts.unshift(debt);
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     safeAsync(
       supabase.from('debts').insert({
@@ -936,7 +1033,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     safeAsync(
       supabase.from('debts').update({
@@ -953,7 +1050,7 @@ class StorageService {
   deleteDebt(debtId: string): void {
     const debts = this.getDebts().filter((d) => d.id !== debtId);
     localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(debts));
-    this.notifyListeners();
+    this.notifyListeners(true);
     safeAsync(supabase.from('debts').delete().eq('id', debtId));
   }
 
@@ -972,7 +1069,7 @@ class StorageService {
     const records = this.getProfits();
     records.unshift(record);
     localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(records));
-    this.notifyListeners();
+    this.notifyListeners(true);
 
     safeAsync(
       supabase.from('external_profits').insert({
@@ -993,7 +1090,7 @@ class StorageService {
   deleteProfitRecord(id: string): void {
     const records = this.getProfits().filter((r) => r.id !== id);
     localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(records));
-    this.notifyListeners();
+    this.notifyListeners(true);
     safeAsync(supabase.from('external_profits').delete().eq('id', id));
   }
 
@@ -1032,6 +1129,7 @@ class StorageService {
           category: p.category,
           buy_price: p.buyPrice,
           sell_price: p.sellPrice,
+          wholesale_price: p.wholesalePrice ?? p.sellPrice ?? 0,
           stock: p.stock,
           min_stock: p.minStock,
           photo_url: p.photoUrl,
@@ -1049,8 +1147,12 @@ class StorageService {
           name: u.name,
           email: u.email,
           role: u.role,
+          customer_type: u.customerType || 'general',
           phone: u.phone,
           address: u.address,
+          password_hash: u.password || null,
+          password: u.password || null,
+          status: u.status || 'approved',
           created_at: u.createdAt,
         }));
         await supabase.from('users').upsert(userRows);

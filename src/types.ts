@@ -1,11 +1,13 @@
 export type Role = 'admin' | 'customer';
 export type CustomerStatus = 'approved' | 'pending' | 'rejected';
+export type CustomerType = 'general' | 'wholesale'; // 'general' = Pembeli Umum, 'wholesale' = Pembeli Borongan / Grosir
 
 export interface User {
   id: string;
   name: string;
   email: string;
   role: Role;
+  customerType?: CustomerType; // Umum atau Borongan
   phone?: string;
   address?: string;
   password?: string;
@@ -33,7 +35,8 @@ export interface Product {
   name: string;
   category: string;
   buyPrice: number;
-  sellPrice: number;
+  sellPrice: number; // Harga Jual Umum / Eceran
+  wholesalePrice: number; // Harga Borongan / Grosir
   stock: number;
   minStock: number;
   photoUrl: string;
@@ -73,6 +76,7 @@ export interface Order {
   customerName: string;
   customerPhone?: string;
   customerAddress?: string;
+  customerType?: CustomerType; // 'general' | 'wholesale'
   items: OrderItem[];
   subtotal: number;
   totalDiscount: number;

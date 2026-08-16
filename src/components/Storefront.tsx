@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { Product, CartItem, StoreSettings } from '../types';
+import { Product, CartItem, StoreSettings, User } from '../types';
 import { ProductCard } from './ProductCard';
-import { Search, Sparkles, Filter, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Search, Sparkles, Filter, ShoppingBag, ArrowRight, Tag } from 'lucide-react';
 import { formatRupiah } from '../lib/imageHelper';
 
 interface StorefrontProps {
   products: Product[];
   settings: StoreSettings;
   cart: CartItem[];
-  onAddToCart: (product: Product, quantity: number) => void;
+  currentUser?: User | null;
+  onAddToCart: (product: Product, quantity: number, customPrice?: number) => void;
   onOpenCart: () => void;
   isLoggedIn: boolean;
   onRequestLogin: () => void;
@@ -18,6 +19,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
   products,
   settings,
   cart,
+  currentUser,
   onAddToCart,
   onOpenCart,
   isLoggedIn,
@@ -25,6 +27,8 @@ export const Storefront: React.FC<StorefrontProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const isWholesaleCustomer = currentUser?.customerType === 'wholesale';
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -44,11 +48,40 @@ export const Storefront: React.FC<StorefrontProps> = ({
     });
   }, [products, selectedCategory, searchQuery]);
 
-  const totalCartPrice = cart.reduce((sum, item) => sum + item.product.sellPrice * item.quantity, 0);
+  const totalCartPrice = cart.reduce((sum, item) => {
+    const itemPrice = item.customPrice ?? (
+      isWholesaleCustomer && item.product.wholesalePrice > 0 
+        ? item.product.wholesalePrice 
+        : item.product.sellPrice
+    );
+    return sum + itemPrice * item.quantity;
+  }, 0);
   const totalCartQty = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div className="space-y-4 pb-20">
+      {/* Wholesale Customer Notice Banner if applicable */}
+      {isWholesaleCustomer && (
+        <div className="bg-blue-600 text-white p-3 rounded-xl shadow-xs border border-blue-500 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-blue-700 text-white">
+              <Tag className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-extrabold flex items-center gap-1.5">
+                <span>Akun Pelanggan Borongan Aktif</span>
+                <span className="bg-white text-blue-900 text-[10px] font-black px-1.5 py-0.2 rounded uppercase">
+                  Harga Borongan
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-100 mt-0.5">
+                Harga katalog otomatis ditampilkan sesuai tarif grosir/borongan khusus Anda.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Store Header Banner */}
       <div className="relative rounded-xl bg-slate-900 text-white p-4 sm:p-5 shadow-xs overflow-hidden border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="relative z-10 max-w-2xl space-y-1.5">
@@ -152,6 +185,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
               product={product}
               onAddToCart={onAddToCart}
               isLoggedIn={isLoggedIn}
+              currentUser={currentUser}
               onRequestLogin={onRequestLogin}
             />
           ))}
