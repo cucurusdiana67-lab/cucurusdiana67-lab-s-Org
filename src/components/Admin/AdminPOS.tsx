@@ -86,9 +86,17 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const [restoreStockOnDelete, setRestoreStockOnDelete] = useState(true);
 
-  // Refresh customer list if changed
+  // Refresh customer list and orders in real-time
   useEffect(() => {
-    setRegisteredCustomers(storage.getUsers().filter((u) => u.role === 'customer'));
+    const updateData = () => {
+      setRegisteredCustomers(storage.getUsers().filter((u) => u.role === 'customer'));
+      setRecentOrders(
+        storage.getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      );
+    };
+    updateData();
+    const unsubscribe = storage.subscribe(updateData);
+    return () => unsubscribe();
   }, []);
 
   const refreshOrders = () => {
@@ -101,10 +109,12 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 
   // Helper to determine price based on customer type
   const getProductPrice = (product: Product, type: CustomerType) => {
-    if (type === 'wholesale' && product.wholesalePrice > 0) {
-      return product.wholesalePrice;
+    const wholesale = Number(product.wholesalePrice || 0);
+    const sell = Number(product.sellPrice || 0);
+    if (type === 'wholesale') {
+      return wholesale > 0 ? wholesale : sell;
     }
-    return product.sellPrice;
+    return sell;
   };
 
   // Switch customer type and update all cart items' prices
@@ -412,6 +422,23 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                   {cat}
                 </button>
               ))}
+            </div>
+
+            {/* Active Pricing Indicator Banner */}
+            <div className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between text-xs transition ${
+              customerType === 'wholesale'
+                ? 'bg-blue-50 border-blue-200 text-blue-900'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            }`}>
+              <div className="flex items-center gap-1.5">
+                <Tag className={`w-3.5 h-3.5 ${customerType === 'wholesale' ? 'text-blue-600' : 'text-emerald-600'}`} />
+                <span className="font-bold">
+                  {customerType === 'wholesale' ? 'Tarif Aktif: Harga Borongan' : 'Tarif Aktif: Harga Jual Eceran'}
+                </span>
+              </div>
+              <span className="text-[10px] font-medium opacity-90 hidden sm:inline">
+                {customerType === 'wholesale' ? 'Klik item untuk menambahkan dengan harga borongan' : 'Klik item untuk menambahkan dengan harga jual'}
+              </span>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, CustomerStatus, StoreSettings } from '../../types';
 import { storage } from '../../lib/storage';
 import { 
@@ -66,6 +66,13 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
     if (onRefreshUsers) onRefreshUsers();
   };
 
+  // Subscribe to real-time local & remote storage updates
+  useEffect(() => {
+    refreshList();
+    const unsubscribe = storage.subscribe(refreshList);
+    return () => unsubscribe();
+  }, []);
+
   // Only customers
   const customers = users.filter((u) => u.role === 'customer');
 
@@ -124,7 +131,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
       address: customer.address || '',
       password: customer.password || '',
       customerType: customer.customerType || 'general',
-      status: customer.status || 'pending',
+      status: customer.status || 'approved',
     });
     setFormError(null);
     setIsModalOpen(true);
@@ -134,26 +141,28 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
     e.preventDefault();
     setFormError(null);
 
-    if (!formData.name.trim() || !formData.email.trim()) {
-      setFormError('Nama dan Email wajib diisi!');
+    if (!formData.name.trim()) {
+      setFormError('Nama lengkap pelanggan wajib diisi!');
       return;
     }
 
-    const cleanEmail = formData.email.trim().toLowerCase();
+    // Auto-generate email if left blank
+    const cleanPhone = formData.phone.trim().replace(/[^0-9]/g, '');
+    let cleanEmail = formData.email.trim().toLowerCase();
+    if (!cleanEmail) {
+      cleanEmail = cleanPhone ? `${cleanPhone}@pelanggan.local` : `cust_${Date.now()}@pelanggan.local`;
+    }
 
     // Check duplicate email
     const duplicate = users.find(
       (u) => u.email.toLowerCase() === cleanEmail && (!editingCustomer || u.id !== editingCustomer.id)
     );
     if (duplicate) {
-      setFormError('Email sudah digunakan oleh akun lain!');
+      setFormError('Email / No HP sudah digunakan oleh akun pelanggan lain!');
       return;
     }
 
-    if (!editingCustomer && !formData.password.trim()) {
-      setFormError('Kata sandi wajib diisi untuk pelanggan baru!');
-      return;
-    }
+    const defaultPwd = formData.password.trim() || '123456';
 
     if (editingCustomer) {
       const updated: User = {
@@ -162,12 +171,12 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
         email: cleanEmail,
         phone: formData.phone.trim() || undefined,
         address: formData.address.trim() || undefined,
-        password: formData.password.trim() || editingCustomer.password || '123',
+        password: defaultPwd,
         customerType: formData.customerType,
         status: formData.status,
       };
       storage.saveUser(updated);
-      showToast(`Data pelanggan "${updated.name}" berhasil diperbarui.`);
+      showToast(`Data pelanggan "${updated.name}" berhasil disimpan.`);
     } else {
       const newCustomer: User = {
         id: 'user-cust-' + Date.now(),
@@ -175,14 +184,14 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
         email: cleanEmail,
         phone: formData.phone.trim() || '081234567890',
         address: formData.address.trim() || settings.storeAddress,
-        password: formData.password.trim(),
+        password: defaultPwd,
         role: 'customer',
         customerType: formData.customerType,
         status: formData.status,
         createdAt: new Date().toISOString(),
       };
       storage.saveUser(newCustomer);
-      showToast(`Pelanggan baru "${newCustomer.name}" (${newCustomer.customerType === 'wholesale' ? 'Borongan' : 'Umum'}) berhasil ditambahkan.`);
+      showToast(`Pelanggan baru "${newCustomer.name}" (${newCustomer.customerType === 'wholesale' ? 'Borongan' : 'Umum'}) berhasil disimpan.`);
     }
 
     refreshList();
@@ -670,18 +679,17 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Email</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Email (Opsional)</label>
                   <input
-                    type="email"
-                    required
+                    type="text"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="nama@email.com"
+                    placeholder="nama@email.com (atau kosongkan)"
                     className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">No. WhatsApp</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-0.5">No. WhatsApp / HP</label>
                   <input
                     type="text"
                     value={formData.phone}
@@ -790,16 +798,15 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                  {editingCustomer ? 'Ubah Kata Sandi (Kosongkan jika tidak diganti)' : 'Kata Sandi'}
+                  {editingCustomer ? 'Ubah Kata Sandi (Kosongkan jika tidak diganti)' : 'Kata Sandi (Opsional - Default: 123456)'}
                 </label>
                 <div className="relative">
                   <Lock className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    required={!editingCustomer}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder={editingCustomer ? 'Kata sandi saat ini' : 'Minimal 4 karakter'}
+                    placeholder={editingCustomer ? 'Kata sandi saat ini' : 'Default: 123456'}
                     className="w-full pl-8 pr-2.5 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>

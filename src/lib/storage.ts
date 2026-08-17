@@ -466,17 +466,20 @@ class StorageService {
         localStorage.setItem('has_synced_cloud', 'true');
       }
 
-      // 3. Fetch Users (Admins and Customers) with Safe Password Preservation
+      // 3. Fetch Users (Admins and Customers) with Safe Password & Local Preservation
       const { data: remoteUsers, error: userErr } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: true });
 
-      if (!userErr && remoteUsers && remoteUsers.length > 0) {
+      if (!userErr && remoteUsers) {
         const localUsers = this.getUsers();
-        const mappedUsers: User[] = remoteUsers.map((u: any) => {
+        const remoteIds = new Set(remoteUsers.map((u: any) => u.id));
+        const remoteEmails = new Set(remoteUsers.map((u: any) => (u.email || '').toLowerCase()));
+
+        const mappedRemoteUsers: User[] = remoteUsers.map((u: any) => {
           const matchedLocal = localUsers.find(
-            (lu) => lu.id === u.id || lu.email.toLowerCase() === u.email.toLowerCase()
+            (lu) => lu.id === u.id || (lu.email && lu.email.toLowerCase() === (u.email || '').toLowerCase())
           );
           // Preserve local password if remote password_hash is not set or empty
           const remotePassword = u.password || u.password_hash;
@@ -491,19 +494,45 @@ class StorageService {
             email: u.email,
             role: u.role || 'customer',
             customerType: u.customer_type || u.customerType || matchedLocal?.customerType || 'general',
-            phone: u.phone || '',
-            address: u.address || '',
+            phone: u.phone || matchedLocal?.phone || '',
+            address: u.address || matchedLocal?.address || '',
             password: finalPassword,
-            status: u.status || (u.role === 'admin' ? 'approved' : 'pending'),
-            createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+            status: u.status || matchedLocal?.status || (u.role === 'admin' ? 'approved' : 'approved'),
+            createdAt: u.created_at || u.createdAt || matchedLocal?.createdAt || new Date().toISOString(),
           };
         });
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mappedUsers));
+
+        // Keep local-only users so newly created local customers are not deleted before or if Supabase sync is delayed
+        const localOnlyUsers = localUsers.filter(
+          (lu) => !remoteIds.has(lu.id) && !remoteEmails.has((lu.email || '').toLowerCase())
+        );
+
+        // Sync local-only users back up to Supabase in background
+        localOnlyUsers.forEach((lu) => {
+          safeAsync(
+            supabase.from('users').upsert({
+              id: lu.id,
+              name: lu.name,
+              email: lu.email,
+              role: lu.role,
+              customer_type: lu.customerType || 'general',
+              phone: lu.phone || null,
+              address: lu.address || null,
+              password_hash: lu.password || null,
+              password: lu.password || null,
+              status: lu.status,
+              created_at: lu.createdAt,
+            })
+          );
+        });
+
+        const mergedUsers = [...mappedRemoteUsers, ...localOnlyUsers];
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
 
         // If current logged-in user changed/updated remotely, update active session
         const cur = this.getCurrentUser();
         if (cur) {
-          const fresh = mappedUsers.find((u) => u.id === cur.id || u.email.toLowerCase() === cur.email.toLowerCase());
+          const fresh = mergedUsers.find((u) => u.id === cur.id || u.email.toLowerCase() === cur.email.toLowerCase());
           if (fresh) {
             this.setCurrentUser(fresh);
           }
