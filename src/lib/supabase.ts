@@ -243,3 +243,28 @@ CREATE POLICY "Allow public full access for debts" ON debts FOR ALL USING (true)
 CREATE POLICY "Allow public full access for debt_payments" ON debt_payments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public full access for external_profits" ON external_profits FOR ALL USING (true) WITH CHECK (true);
 `;
+
+/**
+ * Skrip SQL ALTER TABLE untuk Update Database Supabase yang sudah ada
+ * Jalankan ini di Supabase SQL Editor jika kolom harga borongan & tipe pelanggan belum ada
+ */
+export const SUPABASE_MIGRATION_ALTER_SQL = `-- ==========================================================
+-- SKRIP MIGRASI / ALTER TABLE SUPABASE (POSTGRESQL)
+-- Salin dan jalankan di menu: Supabase Dashboard -> SQL Editor -> Run
+-- ==========================================================
+
+-- 1. Tambahkan kolom harga borongan (wholesale_price) pada tabel products jika belum ada
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC(12, 2) NOT NULL DEFAULT 0;
+
+-- 2. Tambahkan kolom jenis pelanggan (customer_type) pada tabel users jika belum ada
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS customer_type TEXT NOT NULL DEFAULT 'general';
+
+-- 3. Tambahkan kolom jenis pelanggan (customer_type) pada tabel orders jika belum ada
+ALTER TABLE orders 
+ADD COLUMN IF NOT EXISTS customer_type TEXT DEFAULT 'general';
+
+-- 4. Perbarui index untuk kecepatan filter jenis pelanggan
+CREATE INDEX IF NOT EXISTS idx_users_customer_type ON users(customer_type);
+`;

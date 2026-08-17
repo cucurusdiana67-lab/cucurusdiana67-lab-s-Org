@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StoreSettings } from '../../types';
 import { storage } from '../../lib/storage';
-import { SUPABASE_SCHEMA_SQL, SUPABASE_URL } from '../../lib/supabase';
+import { SUPABASE_SCHEMA_SQL, SUPABASE_MIGRATION_ALTER_SQL, SUPABASE_URL } from '../../lib/supabase';
 import { 
   Settings, 
   Save, 
@@ -33,6 +33,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
 }) => {
   const [formData, setFormData] = useState<StoreSettings>({ ...settings });
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedMigrationSql, setCopiedMigrationSql] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -97,6 +98,12 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
     navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 2000);
+  };
+
+  const handleCopyMigrationSql = () => {
+    navigator.clipboard.writeText(SUPABASE_MIGRATION_ALTER_SQL);
+    setCopiedMigrationSql(true);
+    setTimeout(() => setCopiedMigrationSql(false), 2000);
   };
 
   const handleManualSync = async () => {
@@ -376,24 +383,45 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
                 </button>
               </div>
 
-              <button
-                id="copy-sql-schema-btn"
-                type="button"
-                onClick={handleCopySql}
-                className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
-              >
-                {copiedSql ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span>SQL Berhasil Disalin!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 text-emerald-600" />
-                    <span>Salin Skrip SQL Schema Supabase</span>
-                  </>
-                )}
-              </button>
+              <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                <button
+                  id="copy-sql-migration-btn"
+                  type="button"
+                  onClick={handleCopyMigrationSql}
+                  className="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  {copiedMigrationSql ? (
+                    <>
+                      <Check className="w-4 h-4 text-blue-600" />
+                      <span>SQL ALTER Migrasi Berhasil Disalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-blue-600" />
+                      <span>Salin Skrip SQL ALTER (Update Tabel Produk & Pelanggan)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  id="copy-sql-schema-btn"
+                  type="button"
+                  onClick={handleCopySql}
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  {copiedSql ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      <span>Skrip Full Schema Berhasil Disalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-emerald-600" />
+                      <span>Salin Skrip Full Schema Supabase (Database Baru)</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 

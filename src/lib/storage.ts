@@ -445,21 +445,30 @@ class StorageService {
         .order('created_at', { ascending: false });
 
       if (!prodErr && remoteProducts) {
-        const mappedProducts: Product[] = remoteProducts.map((p: any) => ({
-          id: p.id,
-          barcode: p.barcode || '',
-          name: p.name,
-          category: p.category,
-          buyPrice: Number(p.buy_price ?? p.buyPrice ?? 0),
-          sellPrice: Number(p.sell_price ?? p.sellPrice ?? 0),
-          wholesalePrice: Number(p.wholesale_price ?? p.wholesalePrice ?? p.sell_price ?? p.sellPrice ?? 0),
-          stock: Number(p.stock ?? 0),
-          minStock: Number(p.min_stock ?? p.minStock ?? 5),
-          photoUrl: p.photo_url || p.photoUrl || '',
-          unit: p.unit || 'Pcs',
-          createdAt: p.created_at || p.createdAt || new Date().toISOString(),
-          updatedAt: p.updated_at || p.updatedAt || new Date().toISOString(),
-        }));
+        const localProducts = this.getProducts();
+        const mappedProducts: Product[] = remoteProducts.map((p: any) => {
+          const matchedLocal = localProducts.find((lp) => lp.id === p.id);
+          const hasRemoteWholesale = p.wholesale_price !== undefined && p.wholesale_price !== null;
+          const finalWholesale = hasRemoteWholesale
+            ? Number(p.wholesale_price)
+            : Number(matchedLocal?.wholesalePrice ?? p.wholesale_price ?? p.sell_price ?? p.sellPrice ?? 0);
+
+          return {
+            id: p.id,
+            barcode: p.barcode || '',
+            name: p.name,
+            category: p.category,
+            buyPrice: Number(p.buy_price ?? p.buyPrice ?? 0),
+            sellPrice: Number(p.sell_price ?? p.sellPrice ?? 0),
+            wholesalePrice: finalWholesale > 0 ? finalWholesale : Number(p.sell_price ?? p.sellPrice ?? 0),
+            stock: Number(p.stock ?? 0),
+            minStock: Number(p.min_stock ?? p.minStock ?? 5),
+            photoUrl: p.photo_url || p.photoUrl || '',
+            unit: p.unit || 'Pcs',
+            createdAt: p.created_at || p.createdAt || new Date().toISOString(),
+            updatedAt: p.updated_at || p.updatedAt || new Date().toISOString(),
+          };
+        });
         
         // If Supabase table is populated or explicitly empty, store the exact cloud state
         localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
@@ -699,23 +708,43 @@ class StorageService {
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     this.notifyListeners(true);
 
-    // Low egress upsert to Supabase
+    // Low egress upsert to Supabase with schema fault-tolerance
     safeAsync(
-      supabase.from('products').upsert({
-        id: updated.id,
-        barcode: updated.barcode,
-        name: updated.name,
-        category: updated.category,
-        buy_price: updated.buyPrice,
-        sell_price: updated.sellPrice,
-        wholesale_price: updated.wholesalePrice,
-        stock: updated.stock,
-        min_stock: updated.minStock,
-        photo_url: updated.photoUrl,
-        unit: updated.unit,
-        created_at: updated.createdAt,
-        updated_at: updated.updatedAt,
-      })
+      (async () => {
+        const { error } = await supabase.from('products').upsert({
+          id: updated.id,
+          barcode: updated.barcode,
+          name: updated.name,
+          category: updated.category,
+          buy_price: updated.buyPrice,
+          sell_price: updated.sellPrice,
+          wholesale_price: updated.wholesalePrice,
+          stock: updated.stock,
+          min_stock: updated.minStock,
+          photo_url: updated.photoUrl,
+          unit: updated.unit,
+          created_at: updated.createdAt,
+          updated_at: updated.updatedAt,
+        });
+
+        // If wholesale_price column does not exist in Supabase table yet, retry without it
+        if (error && error.message && error.message.includes('wholesale_price')) {
+          await supabase.from('products').upsert({
+            id: updated.id,
+            barcode: updated.barcode,
+            name: updated.name,
+            category: updated.category,
+            buy_price: updated.buyPrice,
+            sell_price: updated.sellPrice,
+            stock: updated.stock,
+            min_stock: updated.minStock,
+            photo_url: updated.photoUrl,
+            unit: updated.unit,
+            created_at: updated.createdAt,
+            updated_at: updated.updatedAt,
+          });
+        }
+      })()
     );
 
     return updated;
