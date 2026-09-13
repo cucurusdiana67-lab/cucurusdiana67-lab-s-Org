@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Send,
   Lock,
-  Filter
+  Filter,
+  FileText
 } from 'lucide-react';
 
 interface AdminCustomersProps {
@@ -45,6 +46,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
     email: '',
     phone: '',
     address: '',
+    notes: '',
     password: '',
     customerType: 'general' as 'general' | 'wholesale',
     status: 'approved' as CustomerStatus,
@@ -114,6 +116,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
       email: '',
       phone: '',
       address: '',
+      notes: '',
       password: '',
       customerType: 'general',
       status: 'approved',
@@ -129,6 +132,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
       email: customer.email,
       phone: customer.phone || '',
       address: customer.address || '',
+      notes: customer.notes || '',
       password: customer.password || '',
       customerType: customer.customerType || 'general',
       status: customer.status || 'approved',
@@ -171,6 +175,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
         email: cleanEmail,
         phone: formData.phone.trim() || undefined,
         address: formData.address.trim() || undefined,
+        notes: formData.notes.trim() || undefined,
         password: defaultPwd,
         customerType: formData.customerType,
         status: formData.status,
@@ -184,6 +189,7 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
         email: cleanEmail,
         phone: formData.phone.trim() || '081234567890',
         address: formData.address.trim() || settings.storeAddress,
+        notes: formData.notes.trim() || undefined,
         password: defaultPwd,
         role: 'customer',
         customerType: formData.customerType,
@@ -518,6 +524,16 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
                       <span className="text-slate-600 line-clamp-2">{customer.address || 'Alamat belum diatur'}</span>
                     </div>
 
+                    {customer.notes && (
+                      <div className="flex items-start gap-1.5 text-[11px] bg-amber-50/70 p-1.5 rounded-md border border-amber-200/60 text-amber-900">
+                        <FileText className="w-3 h-3 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="font-bold text-[10px] text-amber-800 uppercase block">Catatan Belanja:</span>
+                          <span className="text-amber-900 line-clamp-2">{customer.notes}</span>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-50">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-2.5 h-2.5 text-slate-400" />
@@ -708,6 +724,20 @@ export const AdminCustomers: React.FC<AdminCustomersProps> = ({
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   placeholder="Jl. Melati No. 15, RT 02/05..."
                   className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                  Catatan Belanja / Catatan Khusus Pelanggan
+                </label>
+                <textarea
+                  id="admin-customer-notes-input"
+                  rows={3}
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Tuliskan catatan belanja rutin, patokan rumah, barang langganan, atau instruksi pesanan khusus pelanggan..."
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none leading-relaxed"
                 />
               </div>
 

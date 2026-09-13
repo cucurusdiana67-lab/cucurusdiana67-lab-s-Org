@@ -12,7 +12,8 @@ import {
   Clock, 
   Save, 
   KeyRound, 
-  ShieldCheck 
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 
 interface UserProfileViewProps {
@@ -33,6 +34,7 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [name, setName] = useState(currentUser.name);
   const [phone, setPhone] = useState(currentUser.phone || '');
   const [address, setAddress] = useState(currentUser.address || '');
+  const [notes, setNotes] = useState(currentUser.notes || '');
 
   // Password state
   const [currentPass, setCurrentPass] = useState('');
@@ -54,13 +56,14 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
       name: name.trim(),
       phone: phone.trim(),
       address: address.trim(),
+      notes: notes.trim(),
     };
 
     storage.saveUser(updatedUser);
     storage.setCurrentUser(updatedUser);
     onUpdateUser(updatedUser);
 
-    setProfileMsg('Data profil berhasil diperbarui!');
+    setProfileMsg('Data profil dan catatan belanja berhasil diperbarui!');
     setTimeout(() => setProfileMsg(null), 2500);
   };
 
@@ -187,6 +190,26 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   className="w-full pl-7 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                Catatan Belanja & Preferensi Pesanan
+              </label>
+              <div className="relative">
+                <FileText className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                <textarea
+                  id="user-profile-shopping-notes"
+                  rows={4}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Tuliskan catatan belanja rutin, instruksi khusus, atau preferensi pesanan (misal: Tolong pilihkan sayuran yang segar, titip di teras jika rumah kosong, jangan dibungkus plastik tipis, dll)..."
+                  className="w-full pl-8 pr-2.5 py-2 border border-slate-200 rounded-lg text-xs leading-relaxed focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Catatan ini tersimpan di akun Anda dan otomatis terisi saat berbelanja / checkout.
+              </p>
             </div>
 
             <button

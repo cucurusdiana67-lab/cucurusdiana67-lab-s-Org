@@ -10,6 +10,7 @@ export interface User {
   customerType?: CustomerType; // Umum atau Borongan
   phone?: string;
   address?: string;
+  notes?: string; // Catatan belanja / catatan khusus pelanggan
   password?: string;
   status?: CustomerStatus;
   createdAt: string;

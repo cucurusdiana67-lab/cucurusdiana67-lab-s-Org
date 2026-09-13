@@ -60,6 +60,9 @@ export const CartPage: React.FC<CartPageProps> = ({
       setCustomerName(currentUser.name || '');
       setCustomerPhone(currentUser.phone || '');
       setCustomerAddress(currentUser.address || '');
+      if (currentUser.notes && !notes) {
+        setNotes(currentUser.notes);
+      }
     }
   }, [currentUser]);
 
@@ -486,14 +489,16 @@ export const CartPage: React.FC<CartPageProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">Catatan Tambahan (Opsional)</label>
-                <input
+                <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                  Catatan Belanja & Instruksi Pesanan (Opsional)
+                </label>
+                <textarea
                   id="checkout-notes-input"
-                  type="text"
+                  rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Contoh: Titip di pos satpam"
-                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="Tuliskan catatan belanja di sini (misal: titip di pos satpam, request barang segar, instruksi kemasan, atau catatan belanja lainnya)..."
+                  className="w-full px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none leading-relaxed"
                 />
               </div>
             </div>

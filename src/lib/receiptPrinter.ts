@@ -46,7 +46,7 @@ export function printThermalReceipt(order: Order, settings: StoreSettings) {
     <html>
       <head>
         <meta charset="utf-8">
-        <title>Struk #${order.orderNumber}</title>
+        <title>Struk - ${order.customerName}</title>
         <style>
           * {
             box-sizing: border-box;
@@ -169,13 +169,13 @@ export function printThermalReceipt(order: Order, settings: StoreSettings) {
 
         <div class="divider"></div>
 
-        <div class="row meta-row">
-          <span class="col-left">No: #${order.orderNumber}</span>
-          <span class="col-right">${order.type === 'pos' ? 'KASIR' : 'ONLINE'}</span>
+        <div class="row meta-row" style="font-size: 12px; margin-bottom: 2px;">
+          <span class="col-left"><b style="font-size: 11px;">Pelanggan:</b> <span class="bold">${order.customerName}</span></span>
+          <span class="col-right" style="font-size: 10.5px;">${order.type === 'pos' ? 'KASIR' : 'ONLINE'}</span>
         </div>
         <div class="row meta-row">
           <span class="col-left">Tgl: ${formattedDate}</span>
-          <span class="col-right">${order.customerName.slice(0, 10)}</span>
+          ${order.customerPhone ? `<span class="col-right">${order.customerPhone}</span>` : ''}
         </div>
 
         <div class="divider"></div>
@@ -217,6 +217,14 @@ export function printThermalReceipt(order: Order, settings: StoreSettings) {
         ${
           order.remainingDebt > 0
             ? `<div class="row debt-box"><span class="col-left">SISA HUTANG:</span><span class="col-right">${formatRupiah(order.remainingDebt)}</span></div>`
+            : ''
+        }
+        ${
+          order.notes
+            ? `<div class="divider"></div>
+               <div style="font-size: 11px; word-break: break-word; line-height: 1.25; margin: 2px 0;">
+                 <span class="bold">Catatan:</span> ${order.notes}
+               </div>`
             : ''
         }
 
