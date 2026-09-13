@@ -490,12 +490,26 @@ class StorageService {
           const matchedLocal = localUsers.find(
             (lu) => lu.id === u.id || (lu.email && lu.email.toLowerCase() === (u.email || '').toLowerCase())
           );
-          // Preserve local password if remote password_hash is not set or empty
+          // Determine password with precedence:
+          // If local user has a non-default custom password and remote is still default 'admin', prioritize local custom password!
           const remotePassword = u.password || u.password_hash;
-          const finalPassword =
-            remotePassword && remotePassword.trim() !== ''
-              ? remotePassword
-              : matchedLocal?.password || (u.role === 'admin' ? 'admin' : '123456');
+          let finalPassword = matchedLocal?.password || (u.role === 'admin' ? 'admin' : '123456');
+
+          if (remotePassword && remotePassword.trim() !== '') {
+            // If remote is 'admin' but local admin had explicitly changed to something else, keep local changed password
+            if (u.role === 'admin' && remotePassword === 'admin' && matchedLocal?.password && matchedLocal.password !== 'admin') {
+              finalPassword = matchedLocal.password;
+              // Push local updated password to Supabase so cloud updates
+              safeAsync(
+                supabase.from('users').update({
+                  password: matchedLocal.password,
+                  password_hash: matchedLocal.password,
+                }).eq('id', u.id)
+              );
+            } else {
+              finalPassword = remotePassword;
+            }
+          }
 
           return {
             id: u.id,
@@ -827,19 +841,49 @@ class StorageService {
     this.notifyListeners(true);
 
     safeAsync(
-      supabase.from('users').upsert({
-        id: userToSave.id,
-        name: userToSave.name,
-        email: userToSave.email,
-        role: userToSave.role,
-        customer_type: userToSave.customerType || 'general',
-        phone: userToSave.phone || null,
-        address: userToSave.address || null,
-        password_hash: userToSave.password || null,
-        password: userToSave.password || null,
-        status: userToSave.status,
-        created_at: userToSave.createdAt,
-      })
+      (async () => {
+        const payloadWithCustomerType = {
+          id: userToSave.id,
+          name: userToSave.name,
+          email: userToSave.email,
+          role: userToSave.role,
+          customer_type: userToSave.customerType || 'general',
+          phone: userToSave.phone || null,
+          address: userToSave.address || null,
+          password_hash: userToSave.password || null,
+          password: userToSave.password || null,
+          status: userToSave.status,
+          created_at: userToSave.createdAt,
+        };
+
+        const { error } = await supabase.from('users').upsert(payloadWithCustomerType);
+
+        if (error) {
+          // If customer_type column doesn't exist yet, retry without it
+          const fallbackPayload = {
+            id: userToSave.id,
+            name: userToSave.name,
+            email: userToSave.email,
+            role: userToSave.role,
+            phone: userToSave.phone || null,
+            address: userToSave.address || null,
+            password_hash: userToSave.password || null,
+            password: userToSave.password || null,
+            status: userToSave.status,
+            created_at: userToSave.createdAt,
+          };
+          await supabase.from('users').upsert(fallbackPayload);
+        }
+
+        // Also do a direct update by email to ensure password field updates regardless of ID matching
+        await supabase
+          .from('users')
+          .update({
+            password: userToSave.password,
+            password_hash: userToSave.password,
+          })
+          .eq('email', userToSave.email);
+      })()
     );
 
     return userToSave;

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Order, StoreSettings } from '../../types';
 import { formatRupiah } from '../../lib/imageHelper';
+import { MonthlySalesChart } from './MonthlySalesChart';
 import { 
   TrendingUp, 
   Calendar, 
@@ -199,6 +200,9 @@ export const AdminReports: React.FC<AdminReportsProps> = ({ orders, settings }) 
           <div className="text-[10px] text-slate-400 mt-0.5">Total kuantitas item</div>
         </div>
       </div>
+
+      {/* Monthly Sales Visual Chart with Recharts */}
+      <MonthlySalesChart orders={orders} />
 
       {/* Top Products Sales Ranking */}
       <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs space-y-2.5">

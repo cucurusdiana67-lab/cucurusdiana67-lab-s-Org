@@ -4,6 +4,8 @@ import { storage } from '../../lib/storage';
 import { formatImageUrl, formatRupiah } from '../../lib/imageHelper';
 import { printThermalReceipt, copyOrderToWhatsApp } from '../../lib/receiptPrinter';
 import { BarcodeScannerModal } from '../BarcodeScannerModal';
+import { CustomItemModal, CustomItemData } from './CustomItemModal';
+import { EditCartItemPriceModal } from './EditCartItemPriceModal';
 import { 
   Camera, 
   Search, 
@@ -29,7 +31,8 @@ import {
   X,
   PackageCheck,
   Phone,
-  Tag
+  Tag,
+  PlusCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -48,6 +51,8 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isCustomItemModalOpen, setIsCustomItemModalOpen] = useState(false);
+  const [editingPriceItem, setEditingPriceItem] = useState<CartItem | null>(null);
   
   // Buyer & Pricing Type state
   const [customerType, setCustomerType] = useState<CustomerType>('general');
@@ -121,10 +126,16 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const handleCustomerTypeChange = (newType: CustomerType) => {
     setCustomerType(newType);
     setPosCart((prev) =>
-      prev.map((item) => ({
-        ...item,
-        customPrice: getProductPrice(item.product, newType),
-      }))
+      prev.map((item) => {
+        // Jangan timpa harga custom / barang luar aplikasi
+        if (item.product.id.startsWith('custom-')) {
+          return item;
+        }
+        return {
+          ...item,
+          customPrice: getProductPrice(item.product, newType),
+        };
+      })
     );
   };
 
@@ -207,15 +218,13 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   };
 
   const handleUpdateQty = (productId: string, qty: number) => {
-    const product = products.find((p) => p.id === productId);
-    if (!product) return;
-
     if (qty <= 0) {
       handleRemoveItem(productId);
       return;
     }
 
-    if (qty > product.stock) {
+    const product = products.find((p) => p.id === productId);
+    if (product && qty > product.stock) {
       alert(`Stok maksimal tersedia: ${product.stock}`);
       return;
     }
@@ -227,6 +236,52 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 
   const handleRemoveItem = (productId: string) => {
     setPosCart((prev) => prev.filter((item) => item.product.id !== productId));
+  };
+
+  // Tambah Barang & Harga Luar Aplikasi / Manual
+  const handleAddCustomItem = (data: CustomItemData) => {
+    const customId = `custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const customProduct: Product = {
+      id: customId,
+      barcode: '',
+      name: data.name,
+      category: data.category || 'Luar Aplikasi',
+      buyPrice: data.buyPrice || 0,
+      sellPrice: data.sellPrice,
+      wholesalePrice: data.sellPrice,
+      stock: 999999,
+      minStock: 0,
+      photoUrl: '',
+      unit: data.unit || 'Pcs',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setPosCart((prev) => [
+      ...prev,
+      {
+        product: customProduct,
+        quantity: data.quantity || 1,
+        customPrice: data.sellPrice,
+      },
+    ]);
+  };
+
+  // Ubah Harga Satuan Item di Keranjang
+  const handleSaveCartItemPrice = (productId: string, newPrice: number) => {
+    setPosCart((prev) =>
+      prev.map((item) =>
+        item.product.id === productId
+          ? {
+              ...item,
+              customPrice: newPrice,
+              product: item.product.id.startsWith('custom-')
+                ? { ...item.product, sellPrice: newPrice }
+                : item.product,
+            }
+          : item
+      )
+    );
   };
 
   const handleScanSuccess = (barcode: string) => {
@@ -382,7 +437,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
         <div className="lg:col-span-7 space-y-2.5">
           {/* Top Bar with Barcode Scanner & Search */}
           <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-2xs space-y-2.5">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap gap-2">
               <button
                 id="pos-open-scanner-btn"
                 type="button"
@@ -393,7 +448,18 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                 <span>Scan Barcode</span>
               </button>
 
-              <div className="relative flex-1">
+              <button
+                id="pos-open-custom-item-btn"
+                type="button"
+                onClick={() => setIsCustomItemModalOpen(true)}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition shrink-0"
+                title="Tambah barang atau jasa di luar aplikasi dengan harga manual"
+              >
+                <PlusCircle className="w-3.5 h-3.5 text-white" />
+                <span>+ Barang Luar</span>
+              </button>
+
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   id="pos-search-product-input"
@@ -511,6 +577,23 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                 </button>
               );
             })}
+
+            {filteredProducts.length === 0 && (
+              <div className="col-span-full py-8 px-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/60">
+                <p className="font-bold text-xs text-slate-700">Barang tidak ditemukan di katalog</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 mb-2.5">
+                  Ingin menjual barang, jasa, atau pesanan khusus di luar aplikasi?
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomItemModalOpen(true)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-98 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 shadow-2xs transition"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>+ Tambah Barang Luar / Manual</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -532,15 +615,26 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                   </span>
                 )}
               </div>
-              {posCart.length > 0 && (
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setPosCart([])}
-                  className="text-[11px] text-red-600 hover:text-red-700 font-semibold"
+                  onClick={() => setIsCustomItemModalOpen(true)}
+                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-md text-[11px] font-bold flex items-center gap-1 transition"
+                  title="Tambah barang atau jasa di luar aplikasi"
                 >
-                  Reset
+                  <PlusCircle className="w-3 h-3 text-amber-600" />
+                  <span>+ Barang Luar</span>
                 </button>
-              )}
+                {posCart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPosCart([])}
+                    className="text-[11px] text-red-600 hover:text-red-700 font-semibold px-1"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Buyer Type & Customer Selection Box */}
@@ -613,33 +707,57 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
             {/* Cart Items List */}
             <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
               {posCart.length === 0 ? (
-                <div className="py-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
-                  Klik barang di sebelah kiri atau scan barcode untuk transaksi.
+                <div className="py-6 px-3 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                  <p>Klik barang di sebelah kiri atau scan barcode untuk transaksi.</p>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomItemModalOpen(true)}
+                    className="mt-2 text-amber-700 hover:text-amber-800 font-bold text-[11px] inline-flex items-center gap-1"
+                  >
+                    <PlusCircle className="w-3 h-3" />
+                    <span>+ Tambah Barang Luar Aplikasi</span>
+                  </button>
                 </div>
               ) : (
                 posCart.map((item) => {
                   const itemPrice = item.customPrice ?? getProductPrice(item.product, customerType);
+                  const isCustom = item.product.id.startsWith('custom-');
+
                   return (
                     <div
                       key={item.product.id}
                       className="p-2 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2 text-xs"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-slate-900 truncate flex items-center gap-1">
-                          <span>{item.product.name}</span>
-                          {customerType === 'wholesale' && item.product.wholesalePrice > 0 && (
-                            <span className="text-[8.5px] font-bold bg-blue-100 text-blue-800 px-1 py-0.2 rounded">
+                        <div className="font-bold text-slate-900 truncate flex items-center gap-1 flex-wrap">
+                          <span className="truncate">{item.product.name}</span>
+                          {isCustom && (
+                            <span className="text-[8.5px] font-bold bg-amber-100 text-amber-800 px-1 py-0.2 rounded shrink-0">
+                              Luar Aplikasi
+                            </span>
+                          )}
+                          {customerType === 'wholesale' && !isCustom && item.product.wholesalePrice > 0 && (
+                            <span className="text-[8.5px] font-bold bg-blue-100 text-blue-800 px-1 py-0.2 rounded shrink-0">
                               Borongan
                             </span>
                           )}
                         </div>
-                        <div className="text-slate-500 text-[10px] font-mono">
-                          {formatRupiah(itemPrice)} x {item.quantity}
+                        <div className="flex items-center gap-2 text-slate-500 text-[10px] font-mono mt-0.5">
+                          <span>{formatRupiah(itemPrice)} x {item.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingPriceItem(item)}
+                            className="text-emerald-700 hover:text-emerald-800 underline font-sans font-semibold flex items-center gap-0.5"
+                            title="Ubah harga satuan untuk item ini"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                            <span>Ubah Harga</span>
+                          </button>
                         </div>
                       </div>
 
                       {/* Qty button */}
-                      <div className="flex items-center border border-slate-300 rounded bg-white overflow-hidden shadow-2xs">
+                      <div className="flex items-center border border-slate-300 rounded bg-white overflow-hidden shadow-2xs shrink-0">
                         <button
                           type="button"
                           onClick={() => handleUpdateQty(item.product.id, item.quantity - 1)}
@@ -657,7 +775,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                         </button>
                       </div>
 
-                      <div className="text-right min-w-[70px]">
+                      <div className="text-right min-w-[70px] shrink-0">
                         <div className="font-extrabold text-slate-900 font-mono text-xs">
                           {formatRupiah(itemPrice * item.quantity)}
                         </div>
@@ -1273,6 +1391,24 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Tambah Barang / Jasa Luar Aplikasi */}
+      <CustomItemModal
+        isOpen={isCustomItemModalOpen}
+        onClose={() => setIsCustomItemModalOpen(false)}
+        onAddCustomItem={handleAddCustomItem}
+      />
+
+      {/* Modal Ubah Harga Item di Keranjang POS */}
+      {editingPriceItem && (
+        <EditCartItemPriceModal
+          isOpen={!!editingPriceItem}
+          onClose={() => setEditingPriceItem(null)}
+          cartItem={editingPriceItem}
+          customerType={customerType}
+          onSavePrice={handleSaveCartItemPrice}
+        />
       )}
     </div>
   );
