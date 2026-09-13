@@ -66,7 +66,7 @@ export const EditCartItemPriceModal: React.FC<EditCartItemPriceModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-3.5">
+        <form onSubmit={handleSubmit} noValidate className="p-4 space-y-3.5">
           <div>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
               Nama Produk:
@@ -75,14 +75,21 @@ export const EditCartItemPriceModal: React.FC<EditCartItemPriceModalProps> = ({
               {item.product.name}
             </p>
             <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-              Harga Asli Katalog: {formatRupiah(item.product.sellPrice)}
+              Harga Asli: {formatRupiah(item.product.sellPrice)}
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">
-              Harga Satuan Baru (Rp)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-800">
+                Harga Satuan Baru
+              </label>
+              {typeof price === 'number' && price > 0 && (
+                <span className="text-[10px] text-emerald-700 font-mono font-bold">
+                  {formatRupiah(price)}
+                </span>
+              )}
+            </div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 font-mono">
                 Rp
@@ -91,10 +98,17 @@ export const EditCartItemPriceModal: React.FC<EditCartItemPriceModalProps> = ({
                 ref={inputRef}
                 type="number"
                 min="0"
-                step="100"
-                required
+                step="any"
                 value={price}
-                onChange={(e) => setPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setPrice('');
+                  } else {
+                    const num = Number(val);
+                    setPrice(isNaN(num) ? '' : num);
+                  }
+                }}
                 className="w-full pl-9 pr-3 py-2 text-sm font-mono font-bold border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
             </div>

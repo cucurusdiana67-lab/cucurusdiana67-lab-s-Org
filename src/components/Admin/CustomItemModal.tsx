@@ -50,12 +50,31 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
   const [name, setName] = useState('');
   const [sellPrice, setSellPrice] = useState<number | ''>('');
   const [buyPrice, setBuyPrice] = useState<number | ''>('');
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState<number | ''>(1);
   const [unit, setUnit] = useState('Pcs');
+  const [customUnit, setCustomUnit] = useState('');
   const [category, setCategory] = useState('Luar Aplikasi');
   const [notes, setNotes] = useState('');
 
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const STANDARD_UNITS = [
+    'Pcs',
+    'Bungkus',
+    'Tabung',
+    'Galon',
+    'Lembar',
+    'Kg',
+    'Gram',
+    'Liter',
+    'Dus',
+    'Botol',
+    'Ikat',
+    'Porsi',
+    'Box',
+    'Paket',
+    'Trip'
+  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -64,6 +83,7 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
       setBuyPrice('');
       setQuantity(1);
       setUnit('Pcs');
+      setCustomUnit('');
       setCategory('Luar Aplikasi');
       setNotes('');
       setTimeout(() => {
@@ -79,15 +99,22 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
     setCategory(preset.category);
     setSellPrice(preset.sellPrice);
     setBuyPrice(preset.buyPrice);
-    setUnit(preset.unit);
+    if (STANDARD_UNITS.includes(preset.unit)) {
+      setUnit(preset.unit);
+      setCustomUnit('');
+    } else {
+      setUnit('Lainnya');
+      setCustomUnit(preset.unit);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = name.trim();
-    const finalSellPrice = Number(sellPrice) || 0;
-    const finalBuyPrice = Number(buyPrice) || 0;
-    const finalQty = Math.max(1, Number(quantity) || 1);
+    const finalSellPrice = typeof sellPrice === 'number' ? sellPrice : (Number(sellPrice) || 0);
+    const finalBuyPrice = typeof buyPrice === 'number' ? buyPrice : (Number(buyPrice) || 0);
+    const finalQty = typeof quantity === 'number' && quantity > 0 ? quantity : (Number(quantity) || 1);
+    const finalUnit = unit === 'Lainnya' ? (customUnit.trim() || 'Pcs') : unit.trim() || 'Pcs';
 
     if (!finalName) {
       alert('Silakan masukkan nama barang atau jasa!');
@@ -104,7 +131,7 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
       sellPrice: finalSellPrice,
       buyPrice: finalBuyPrice,
       quantity: finalQty,
-      unit: unit.trim() || 'Pcs',
+      unit: finalUnit,
       category: category.trim() || 'Luar Aplikasi',
       notes: notes.trim() || undefined,
     });
@@ -112,10 +139,10 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
     onClose();
   };
 
-  const estimatedProfit = Math.max(
-    0,
-    ((Number(sellPrice) || 0) - (Number(buyPrice) || 0)) * (Number(quantity) || 1)
-  );
+  const currentQty = typeof quantity === 'number' && quantity > 0 ? quantity : 1;
+  const currentSellPrice = typeof sellPrice === 'number' ? sellPrice : (Number(sellPrice) || 0);
+  const currentBuyPrice = typeof buyPrice === 'number' ? buyPrice : (Number(buyPrice) || 0);
+  const estimatedProfit = Math.max(0, (currentSellPrice - currentBuyPrice) * currentQty);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs">
@@ -151,7 +178,7 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-3.5 max-h-[85vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} noValidate className="p-4 space-y-3.5 max-h-[85vh] overflow-y-auto">
           {/* Quick Presets */}
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
@@ -194,20 +221,34 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
           {/* Pricing Grid: Sell Price & Buy Price (Cost) */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Harga Jual ke Pembeli <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-800">
+                  Harga Jual <span className="text-red-500">*</span>
+                </label>
+                {currentSellPrice > 0 && (
+                  <span className="text-[10px] text-amber-700 font-mono font-bold">
+                    {formatRupiah(currentSellPrice)}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 font-mono">
                   Rp
                 </span>
                 <input
                   type="number"
-                  required
-                  min="1"
-                  step="100"
+                  min="0"
+                  step="any"
                   value={sellPrice}
-                  onChange={(e) => setSellPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setSellPrice('');
+                    } else {
+                      const num = Number(val);
+                      setSellPrice(isNaN(num) ? '' : num);
+                    }
+                  }}
                   placeholder="0"
                   className="w-full pl-8 pr-2.5 py-2 text-xs font-mono font-bold border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
@@ -217,9 +258,13 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-bold text-slate-700">
-                  Harga Modal / Beli (HPP)
+                  Harga Modal (HPP)
                 </label>
-                <span className="text-[10px] text-slate-400">(Opsional)</span>
+                {currentBuyPrice > 0 && (
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {formatRupiah(currentBuyPrice)}
+                  </span>
+                )}
               </div>
               <div className="relative">
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
@@ -228,10 +273,18 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
                 <input
                   type="number"
                   min="0"
-                  step="100"
+                  step="any"
                   value={buyPrice}
-                  onChange={(e) => setBuyPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="0"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setBuyPrice('');
+                    } else {
+                      const num = Number(val);
+                      setBuyPrice(isNaN(num) ? '' : num);
+                    }
+                  }}
+                  placeholder="0 (opsional)"
                   className="w-full pl-8 pr-2.5 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-slate-700"
                 />
               </div>
@@ -239,19 +292,36 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
           </div>
 
           {/* Quantity & Unit */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 items-start">
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
-                Jumlah (Kuantitas / Qty) <span className="text-red-500">*</span>
+                Jumlah (Qty) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
-                required
                 min="1"
+                step="1"
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setQuantity('');
+                  } else {
+                    const num = parseInt(val, 10);
+                    setQuantity(isNaN(num) ? '' : num);
+                  }
+                }}
+                onBlur={() => {
+                  if (quantity === '' || (typeof quantity === 'number' && quantity < 1)) {
+                    setQuantity(1);
+                  }
+                }}
+                placeholder="1"
                 className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
               />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Bisa dikosongkan/dihapus untuk ketik angka baru
+              </span>
             </div>
 
             <div>
@@ -261,7 +331,7 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
               <select
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                className="w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
+                className="w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white font-medium"
               >
                 <option value="Pcs">Pcs / Buah</option>
                 <option value="Bungkus">Bungkus</option>
@@ -269,11 +339,30 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
                 <option value="Galon">Galon</option>
                 <option value="Lembar">Lembar</option>
                 <option value="Kg">Kilogram (Kg)</option>
+                <option value="Gram">Gram</option>
                 <option value="Liter">Liter</option>
                 <option value="Dus">Dus / Karton</option>
+                <option value="Botol">Botol</option>
+                <option value="Ikat">Ikat</option>
+                <option value="Porsi">Porsi</option>
+                <option value="Box">Box</option>
                 <option value="Trip">Trip / Jasa</option>
                 <option value="Paket">Paket</option>
+                <option value="Lainnya">Lainnya (Ketik Manual)...</option>
               </select>
+
+              {unit === 'Lainnya' && (
+                <div className="mt-1.5 animate-in fade-in duration-150">
+                  <input
+                    type="text"
+                    required
+                    value={customUnit}
+                    onChange={(e) => setCustomUnit(e.target.value)}
+                    placeholder="Ketik satuan (mis: Meter, Rol, Kaleng...)"
+                    className="w-full px-2.5 py-1.5 text-xs border border-amber-400 bg-amber-50/50 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none font-medium"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -315,10 +404,10 @@ export const CustomItemModal: React.FC<CustomItemModalProps> = ({
             <div className="flex items-center justify-between text-slate-600">
               <span>Total Harga:</span>
               <span className="font-mono font-bold text-slate-900 text-sm">
-                {formatRupiah((Number(sellPrice) || 0) * quantity)}
+                {formatRupiah(currentSellPrice * currentQty)}
               </span>
             </div>
-            {Number(buyPrice) > 0 && (
+            {currentBuyPrice > 0 && (
               <div className="flex items-center justify-between text-emerald-700 pt-1 border-t border-slate-200/60">
                 <span className="flex items-center gap-1 text-[11px]">
                   <Info className="w-3 h-3 text-emerald-600" />

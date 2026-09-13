@@ -11,12 +11,12 @@ export function printThermalReceipt(order: Order, settings: StoreSettings) {
   const itemsHtml = order.items
     .map(
       (item) => `
-      <div style="display: flex; justify-content: space-between; font-weight: bold; margin-top: 4px;">
-        <span>${item.productName}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
-        <span>${item.quantity} x ${formatRupiah(item.sellPrice)}</span>
-        <span>${formatRupiah(item.subtotal)}</span>
+      <div class="item-block">
+        <div class="item-name">${item.productName}</div>
+        <div class="row item-calc">
+          <span class="col-left">${item.quantity} x ${formatRupiah(item.sellPrice)}</span>
+          <span class="col-right">${formatRupiah(item.subtotal)}</span>
+        </div>
       </div>
     `
     )
@@ -45,100 +45,186 @@ export function printThermalReceipt(order: Order, settings: StoreSettings) {
     <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8">
         <title>Struk #${order.orderNumber}</title>
         <style>
-          @page {
+          * {
+            box-sizing: border-box;
             margin: 0;
-            size: auto;
+            padding: 0;
+          }
+          @page {
+            size: 58mm auto;
+            margin: 0mm;
+          }
+          @media print {
+            html, body {
+              width: 48mm !important;
+              max-width: 48mm !important;
+              margin: 0 auto !important;
+              padding: 0 !important;
+            }
           }
           body {
-            font-family: 'Courier New', Courier, monospace;
-            width: 58mm;
-            max-width: 80mm;
+            font-family: Arial, "Helvetica Neue", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            width: 48mm;
+            max-width: 48mm;
             margin: 0 auto;
-            padding: 8px 6px;
+            padding: 2mm 1mm;
             font-size: 12px;
-            line-height: 1.3;
+            font-weight: 600;
+            line-height: 1.25;
             color: #000;
             background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
           .divider {
-            border-top: 1px dashed #000;
-            margin: 6px 0;
+            border-top: 1.5px dashed #000;
+            margin: 4px 0;
+            width: 100%;
           }
-          .bold { font-weight: bold; }
-          .title { font-size: 15px; font-weight: bold; }
-          .row { display: flex; justify-content: space-between; }
-          @media print {
-            body { width: 100%; }
+          .bold { font-weight: 700; }
+          .font-black { font-weight: 900; }
+          .title {
+            font-size: 15px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: -0.2px;
+          }
+          .subtitle {
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.2;
+          }
+          .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+            margin-bottom: 2px;
+          }
+          .col-left {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
+          }
+          .col-right {
+            flex: 0 0 auto;
+            text-align: right;
+            white-space: nowrap;
+            padding-left: 4px;
+            font-weight: 700;
+          }
+          .item-block {
+            margin-bottom: 4px;
+          }
+          .item-name {
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.25;
+            word-break: break-word;
+          }
+          .item-calc {
+            font-size: 11.5px;
+            font-weight: 600;
+          }
+          .meta-row {
+            font-size: 11px;
+            font-weight: 600;
+          }
+          .total-box {
+            border-top: 1.5px solid #000;
+            border-bottom: 1.5px solid #000;
+            padding: 3px 0;
+            margin: 3px 0;
+            font-size: 14px;
+            font-weight: 900;
+          }
+          .debt-box {
+            border: 1px dashed #000;
+            padding: 3px;
+            margin: 3px 0;
+            font-size: 12.5px;
+            font-weight: 800;
+          }
+          .footer-text {
+            font-size: 10.5px;
+            font-weight: 600;
+            margin-top: 4px;
+            line-height: 1.25;
           }
         </style>
       </head>
       <body>
         <div class="text-center">
           <div class="title">${settings.storeName.toUpperCase()}</div>
-          <div style="font-size: 10px;">${settings.storeAddress}</div>
-          <div style="font-size: 10px;">Telp/WA: ${settings.storePhone}</div>
+          ${settings.storeAddress ? `<div class="subtitle">${settings.storeAddress}</div>` : ''}
+          ${settings.storePhone ? `<div class="subtitle">Telp/WA: ${settings.storePhone}</div>` : ''}
         </div>
 
         <div class="divider"></div>
 
-        <div class="row" style="font-size: 10px;">
-          <span>No: ${order.orderNumber}</span>
-          <span>${order.type === 'pos' ? 'KASIR' : 'ONLINE'}</span>
+        <div class="row meta-row">
+          <span class="col-left">No: #${order.orderNumber}</span>
+          <span class="col-right">${order.type === 'pos' ? 'KASIR' : 'ONLINE'}</span>
         </div>
-        <div class="row" style="font-size: 10px;">
-          <span>Tgl: ${formattedDate}</span>
-          <span>Plg: ${order.customerName.slice(0, 12)}</span>
+        <div class="row meta-row">
+          <span class="col-left">Tgl: ${formattedDate}</span>
+          <span class="col-right">${order.customerName.slice(0, 10)}</span>
         </div>
 
         <div class="divider"></div>
 
-        <div style="font-size: 11px;">
+        <div style="margin: 3px 0;">
           ${itemsHtml}
         </div>
 
         <div class="divider"></div>
 
-        <div class="row">
-          <span>Subtotal:</span>
-          <span>${formatRupiah(order.subtotal)}</span>
+        <div class="row" style="font-size: 11.5px;">
+          <span class="col-left">Subtotal:</span>
+          <span class="col-right">${formatRupiah(order.subtotal)}</span>
         </div>
         ${
           order.totalDiscount > 0
-            ? `<div class="row"><span>Diskon:</span><span>-${formatRupiah(order.totalDiscount)}</span></div>`
+            ? `<div class="row" style="font-size: 11.5px;"><span class="col-left">Diskon:</span><span class="col-right">-${formatRupiah(order.totalDiscount)}</span></div>`
             : ''
         }
-        <div class="row bold" style="font-size: 13px; margin: 2px 0;">
-          <span>TOTAL:</span>
-          <span>${formatRupiah(order.totalAmount)}</span>
+
+        <div class="row total-box">
+          <span class="col-left">TOTAL:</span>
+          <span class="col-right">${formatRupiah(order.totalAmount)}</span>
         </div>
-        <div class="row">
-          <span>Metode:</span>
-          <span>${paymentText}</span>
+
+        <div class="row" style="font-size: 11.5px;">
+          <span class="col-left">Metode:</span>
+          <span class="col-right">${paymentText}</span>
         </div>
-        <div class="row">
-          <span>Bayar:</span>
-          <span>${formatRupiah(order.amountPaid)}</span>
+        <div class="row" style="font-size: 11.5px;">
+          <span class="col-left">Bayar:</span>
+          <span class="col-right">${formatRupiah(order.amountPaid)}</span>
         </div>
         ${
           order.paymentMethod === 'cash' && order.amountPaid >= order.totalAmount
-            ? `<div class="row"><span>Kembalian:</span><span>${formatRupiah(order.amountPaid - order.totalAmount)}</span></div>`
+            ? `<div class="row" style="font-size: 11.5px;"><span class="col-left">Kembalian:</span><span class="col-right">${formatRupiah(order.amountPaid - order.totalAmount)}</span></div>`
             : ''
         }
         ${
           order.remainingDebt > 0
-            ? `<div class="row bold" style="color: #b91c1c;"><span>SISA HUTANG:</span><span>${formatRupiah(order.remainingDebt)}</span></div>`
+            ? `<div class="row debt-box"><span class="col-left">SISA HUTANG:</span><span class="col-right">${formatRupiah(order.remainingDebt)}</span></div>`
             : ''
         }
 
         <div class="divider"></div>
 
-        <div class="text-center" style="font-size: 10px; margin-top: 6px;">
+        <div class="text-center footer-text">
           <div>${settings.receiptFooter}</div>
-          <div style="margin-top: 4px; font-weight: bold;">-- TERIMA KASIH --</div>
+          <div style="margin-top: 3px; font-weight: 800; letter-spacing: 1px;">-- TERIMA KASIH --</div>
         </div>
 
         <script>
@@ -215,51 +301,99 @@ export function printRestockReceipt(products: Product[], settings: StoreSettings
     <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8">
         <title>Bon Belanja Restock</title>
         <style>
-          @page { margin: 0; size: auto; }
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          @page {
+            size: 58mm auto;
+            margin: 0mm;
+          }
+          @media print {
+            html, body {
+              width: 48mm !important;
+              max-width: 48mm !important;
+              margin: 0 auto !important;
+              padding: 0 !important;
+            }
+          }
           body {
-            font-family: 'Courier New', Courier, monospace;
-            width: 58mm;
-            max-width: 80mm;
+            font-family: Arial, "Helvetica Neue", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            width: 48mm;
+            max-width: 48mm;
             margin: 0 auto;
-            padding: 8px 6px;
+            padding: 2mm 1mm;
             font-size: 12px;
-            line-height: 1.3;
+            font-weight: 600;
+            line-height: 1.25;
             color: #000;
             background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .text-center { text-align: center; }
-          .divider { border-top: 1px dashed #000; margin: 6px 0; }
-          .bold { font-weight: bold; }
-          .title { font-size: 14px; font-weight: bold; }
-          .row { display: flex; justify-content: space-between; }
+          .divider {
+            border-top: 1.5px dashed #000;
+            margin: 4px 0;
+            width: 100%;
+          }
+          .bold { font-weight: 700; }
+          .title {
+            font-size: 15px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin-bottom: 2px;
+            letter-spacing: -0.2px;
+          }
+          .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+            margin-bottom: 2px;
+          }
+          .col-left {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
+          }
+          .col-right {
+            flex: 0 0 auto;
+            text-align: right;
+            white-space: nowrap;
+            padding-left: 4px;
+            font-weight: 700;
+          }
         </style>
       </head>
       <body>
         <div class="text-center">
           <div class="title">BON BELANJA / RESTOCK</div>
-          <div style="font-size: 11px; font-weight: bold;">${settings.storeName.toUpperCase()}</div>
-          <div style="font-size: 10px;">Dicetak: ${formattedDate}</div>
+          <div style="font-size: 12px; font-weight: 800;">${settings.storeName.toUpperCase()}</div>
+          <div style="font-size: 10.5px; font-weight: 600;">Dicetak: ${formattedDate}</div>
         </div>
 
         <div class="divider"></div>
 
-        <div style="font-size: 10px; margin-bottom: 4px;">
-          Total Item Perlu Belanja: <b>${products.length} Macam</b>
+        <div style="font-size: 11px; font-weight: 700; margin-bottom: 4px;">
+          Total Item: ${products.length} Macam
         </div>
 
         ${contentHtml}
 
         <div class="divider"></div>
 
-        <div class="row bold" style="font-size: 12px;">
-          <span>ESTIMASI MODAL:</span>
-          <span>${formatRupiah(totalEstimatedCost)}</span>
+        <div class="row bold" style="font-size: 13px; margin: 3px 0; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; padding: 3px 0;">
+          <span class="col-left">ESTIMASI MODAL:</span>
+          <span class="col-right">${formatRupiah(totalEstimatedCost)}</span>
         </div>
 
         <div class="divider"></div>
-        <div class="text-center" style="font-size: 10px;">
+        <div class="text-center" style="font-size: 10.5px; font-weight: 600; margin-top: 3px;">
           Catatan Belanja Pasar / Distributor
         </div>
 
