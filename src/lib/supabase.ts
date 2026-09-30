@@ -257,14 +257,57 @@ export const SUPABASE_MIGRATION_ALTER_SQL = `-- ================================
 ALTER TABLE products 
 ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC(12, 2) NOT NULL DEFAULT 0;
 
--- 2. Tambahkan kolom jenis pelanggan (customer_type) pada tabel users jika belum ada
+-- 2. Tambahkan kolom pendukung akun & catatan pada tabel users jika belum ada
 ALTER TABLE users 
 ADD COLUMN IF NOT EXISTS customer_type TEXT NOT NULL DEFAULT 'general';
+
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS password TEXT;
+
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'approved';
+
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS notes TEXT;
 
 -- 3. Tambahkan kolom jenis pelanggan (customer_type) pada tabel orders jika belum ada
 ALTER TABLE orders 
 ADD COLUMN IF NOT EXISTS customer_type TEXT DEFAULT 'general';
 
--- 4. Perbarui index untuk kecepatan filter jenis pelanggan
+-- 4. Perbarui index untuk kecepatan filter & query
 CREATE INDEX IF NOT EXISTS idx_users_customer_type ON users(customer_type);
+CREATE INDEX IF NOT EXISTS idx_products_wholesale_price ON products(wholesale_price);
+
+-- 5. Pastikan hak akses penuh (RLS) untuk anon public role
+ALTER TABLE store_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE debts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE external_profits ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public full access for store_settings') THEN
+    CREATE POLICY "Allow public full access for store_settings" ON store_settings FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public full access for products') THEN
+    CREATE POLICY "Allow public full access for products" ON products FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public full access for users') THEN
+    CREATE POLICY "Allow public full access for users" ON users FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public full access for orders') THEN
+    CREATE POLICY "Allow public full access for orders" ON orders FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public full access for debts') THEN
+    CREATE POLICY "Allow public full access for debts" ON debts FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public full access for external_profits') THEN
+    CREATE POLICY "Allow public full access for external_profits" ON external_profits FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 `;

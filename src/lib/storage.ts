@@ -234,10 +234,43 @@ function safeAsync(promise: PromiseLike<any>) {
   Promise.resolve(promise).catch(() => {});
 }
 
+// Helper to reliably fetch all rows from Supabase, auto-paginating beyond the default 1000 row limit
+async function fetchAllSupabaseRows<T = any>(
+  tableName: string,
+  orderBy?: string,
+  ascending: boolean = false
+): Promise<{ data: T[]; error: any }> {
+  const pageSize = 1000;
+  let from = 0;
+  let allData: T[] = [];
+
+  while (true) {
+    let query = supabase.from(tableName).select('*');
+    if (orderBy) {
+      query = query.order(orderBy, { ascending });
+    }
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) {
+      // If table doesn't have the orderBy column or range fails on first page, fallback to simple select
+      if (from === 0) {
+        const fallback = await supabase.from(tableName).select('*');
+        return { data: (fallback.data as T[]) || [], error: fallback.error };
+      }
+      return { data: allData, error };
+    }
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data as T[]);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return { data: allData, error: null };
+}
+
 class StorageService {
   private isSupabaseOnline = true;
   private lastSyncTimestamp: string | null = null;
   private isSyncing = false;
+  private activePullPromise: Promise<{ success: boolean; message: string }> | null = null;
   private listeners: Array<() => void> = [];
   private realtimeChannel: any = null;
   private broadcastChannel: any = null;
@@ -408,257 +441,302 @@ class StorageService {
 
   // --- PULL / DOWNLOAD ALL DATA FROM SUPABASE CLOUD ---
   async pullAllDataFromSupabase(isAuto: boolean = false): Promise<{ success: boolean; message: string }> {
+    // Return existing in-flight promise to avoid duplicate concurrent sync requests
+    if (this.activePullPromise) {
+      return this.activePullPromise;
+    }
+
     if (this.isSyncing && !isAuto) {
       return { success: false, message: 'Sinkronisasi sedang berlangsung...' };
     }
 
     this.isSyncing = true;
-    try {
-      // 1. Fetch Store Settings
-      const { data: remoteSettings, error: setErr } = await supabase
-        .from('store_settings')
-        .select('*')
-        .limit(1);
+    this.activePullPromise = (async () => {
+      try {
+        // Fetch all tables concurrently for maximum speed and total fault-isolation
+        const [
+          settingsResult,
+          productsResult,
+          usersResult,
+          ordersResult,
+          debtsResult,
+          profitsResult,
+        ] = await Promise.allSettled([
+          supabase.from('store_settings').select('*').limit(1),
+          fetchAllSupabaseRows('products', 'created_at', false),
+          fetchAllSupabaseRows('users', 'created_at', true),
+          fetchAllSupabaseRows('orders', 'created_at', false),
+          fetchAllSupabaseRows('debts', 'created_at', false),
+          fetchAllSupabaseRows('external_profits', 'created_at', false),
+        ]);
 
-      if (!setErr && remoteSettings && remoteSettings.length > 0) {
-        const rs = remoteSettings[0];
-        const settings: StoreSettings = {
-          appName: rs.app_name || rs.appName || INITIAL_SETTINGS.appName,
-          storeName: rs.store_name || rs.storeName || INITIAL_SETTINGS.storeName,
-          storeAddress: rs.store_address || rs.storeAddress || INITIAL_SETTINGS.storeAddress,
-          storePhone: rs.store_phone || rs.storePhone || INITIAL_SETTINGS.storePhone,
-          receiptFooter: rs.receipt_footer || rs.receiptFooter || INITIAL_SETTINGS.receiptFooter,
-          danaNumber: rs.dana_number || rs.danaNumber || INITIAL_SETTINGS.danaNumber,
-          danaHolder: rs.dana_holder || rs.danaHolder || INITIAL_SETTINGS.danaHolder,
-          codEnabled: rs.cod_enabled !== undefined ? rs.cod_enabled : true,
-          danaEnabled: rs.dana_enabled !== undefined ? rs.dana_enabled : true,
-          qrisUrl: rs.qris_url || rs.qrisUrl || '',
-          lowStockThreshold: rs.low_stock_threshold || rs.lowStockThreshold || 5,
-        };
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      }
+        let loadedProductsCount = 0;
+        let loadedUsersCount = 0;
+        let loadedOrdersCount = 0;
+        let loadedDebtsCount = 0;
 
-      // 2. Fetch Products
-      const { data: remoteProducts, error: prodErr } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!prodErr && remoteProducts) {
-        const localProducts = this.getProducts();
-        const mappedProducts: Product[] = remoteProducts.map((p: any) => {
-          const matchedLocal = localProducts.find((lp) => lp.id === p.id);
-          const hasRemoteWholesale = p.wholesale_price !== undefined && p.wholesale_price !== null;
-          const finalWholesale = hasRemoteWholesale
-            ? Number(p.wholesale_price)
-            : Number(matchedLocal?.wholesalePrice ?? p.wholesale_price ?? p.sell_price ?? p.sellPrice ?? 0);
-
-          return {
-            id: p.id,
-            barcode: p.barcode || '',
-            name: p.name,
-            category: p.category,
-            buyPrice: Number(p.buy_price ?? p.buyPrice ?? 0),
-            sellPrice: Number(p.sell_price ?? p.sellPrice ?? 0),
-            wholesalePrice: finalWholesale > 0 ? finalWholesale : Number(p.sell_price ?? p.sellPrice ?? 0),
-            stock: Number(p.stock ?? 0),
-            minStock: Number(p.min_stock ?? p.minStock ?? 5),
-            photoUrl: p.photo_url || p.photoUrl || '',
-            unit: p.unit || 'Pcs',
-            createdAt: p.created_at || p.createdAt || new Date().toISOString(),
-            updatedAt: p.updated_at || p.updatedAt || new Date().toISOString(),
-          };
-        });
-        
-        // If Supabase table is populated or explicitly empty, store the exact cloud state
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
-        localStorage.setItem('has_synced_cloud', 'true');
-      }
-
-      // 3. Fetch Users (Admins and Customers) with Safe Password & Local Preservation
-      const { data: remoteUsers, error: userErr } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (!userErr && remoteUsers) {
-        const localUsers = this.getUsers();
-        const remoteIds = new Set(remoteUsers.map((u: any) => u.id));
-        const remoteEmails = new Set(remoteUsers.map((u: any) => (u.email || '').toLowerCase()));
-
-        const mappedRemoteUsers: User[] = remoteUsers.map((u: any) => {
-          const matchedLocal = localUsers.find(
-            (lu) => lu.id === u.id || (lu.email && lu.email.toLowerCase() === (u.email || '').toLowerCase())
-          );
-          // Determine password with precedence:
-          // If local user has a non-default custom password and remote is still default 'admin', prioritize local custom password!
-          const remotePassword = u.password || u.password_hash;
-          let finalPassword = matchedLocal?.password || (u.role === 'admin' ? 'admin' : '123456');
-
-          if (remotePassword && remotePassword.trim() !== '') {
-            // If remote is 'admin' but local admin had explicitly changed to something else, keep local changed password
-            if (u.role === 'admin' && remotePassword === 'admin' && matchedLocal?.password && matchedLocal.password !== 'admin') {
-              finalPassword = matchedLocal.password;
-              // Push local updated password to Supabase so cloud updates
-              safeAsync(
-                supabase.from('users').update({
-                  password: matchedLocal.password,
-                  password_hash: matchedLocal.password,
-                }).eq('id', u.id)
-              );
-            } else {
-              finalPassword = remotePassword;
-            }
-          }
-
-          return {
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: u.role || 'customer',
-            customerType: u.customer_type || u.customerType || matchedLocal?.customerType || 'general',
-            phone: u.phone || matchedLocal?.phone || '',
-            address: u.address || matchedLocal?.address || '',
-            password: finalPassword,
-            status: u.status || matchedLocal?.status || (u.role === 'admin' ? 'approved' : 'approved'),
-            createdAt: u.created_at || u.createdAt || matchedLocal?.createdAt || new Date().toISOString(),
-          };
-        });
-
-        // Keep local-only users so newly created local customers are not deleted before or if Supabase sync is delayed
-        const localOnlyUsers = localUsers.filter(
-          (lu) => !remoteIds.has(lu.id) && !remoteEmails.has((lu.email || '').toLowerCase())
-        );
-
-        // Sync local-only users back up to Supabase in background
-        localOnlyUsers.forEach((lu) => {
-          safeAsync(
-            supabase.from('users').upsert({
-              id: lu.id,
-              name: lu.name,
-              email: lu.email,
-              role: lu.role,
-              customer_type: lu.customerType || 'general',
-              phone: lu.phone || null,
-              address: lu.address || null,
-              password_hash: lu.password || null,
-              password: lu.password || null,
-              status: lu.status,
-              created_at: lu.createdAt,
-            })
-          );
-        });
-
-        const mergedUsers = [...mappedRemoteUsers, ...localOnlyUsers];
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
-
-        // If current logged-in user changed/updated remotely, update active session
-        const cur = this.getCurrentUser();
-        if (cur) {
-          const fresh = mergedUsers.find((u) => u.id === cur.id || u.email.toLowerCase() === cur.email.toLowerCase());
-          if (fresh) {
-            this.setCurrentUser(fresh);
+        // 1. Process Store Settings
+        if (settingsResult.status === 'fulfilled' && !settingsResult.value.error && settingsResult.value.data) {
+          const remoteSettings = settingsResult.value.data;
+          if (remoteSettings.length > 0) {
+            const rs = remoteSettings[0];
+            const settings: StoreSettings = {
+              appName: rs.app_name || rs.appName || INITIAL_SETTINGS.appName,
+              storeName: rs.store_name || rs.storeName || INITIAL_SETTINGS.storeName,
+              storeAddress: rs.store_address || rs.storeAddress || INITIAL_SETTINGS.storeAddress,
+              storePhone: rs.store_phone || rs.storePhone || INITIAL_SETTINGS.storePhone,
+              receiptFooter: rs.receipt_footer || rs.receiptFooter || INITIAL_SETTINGS.receiptFooter,
+              danaNumber: rs.dana_number || rs.danaNumber || INITIAL_SETTINGS.danaNumber,
+              danaHolder: rs.dana_holder || rs.danaHolder || INITIAL_SETTINGS.danaHolder,
+              codEnabled: rs.cod_enabled !== undefined ? rs.cod_enabled : true,
+              danaEnabled: rs.dana_enabled !== undefined ? rs.dana_enabled : true,
+              qrisUrl: rs.qris_url || rs.qrisUrl || '',
+              lowStockThreshold: rs.low_stock_threshold || rs.lowStockThreshold || 5,
+            };
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
           }
         }
+
+        // 2. Process Products (Auto-paginated and full schema mapped)
+        if (productsResult.status === 'fulfilled' && !productsResult.value.error && productsResult.value.data) {
+          const remoteProducts = productsResult.value.data;
+          const localProducts = this.getProducts();
+          const mappedProducts: Product[] = remoteProducts.map((p: any) => {
+            const matchedLocal = localProducts.find((lp) => lp.id === p.id);
+            const hasRemoteWholesale = p.wholesale_price !== undefined && p.wholesale_price !== null;
+            const finalWholesale = hasRemoteWholesale
+              ? Number(p.wholesale_price)
+              : Number(matchedLocal?.wholesalePrice ?? p.wholesale_price ?? p.sell_price ?? p.sellPrice ?? 0);
+
+            return {
+              id: p.id,
+              barcode: p.barcode || '',
+              name: p.name || 'Produk Tanpa Nama',
+              category: p.category || 'Lainnya',
+              buyPrice: Number(p.buy_price ?? p.buyPrice ?? 0),
+              sellPrice: Number(p.sell_price ?? p.sellPrice ?? 0),
+              wholesalePrice: finalWholesale > 0 ? finalWholesale : Number(p.sell_price ?? p.sellPrice ?? 0),
+              stock: Number(p.stock ?? 0),
+              minStock: Number(p.min_stock ?? p.minStock ?? 5),
+              photoUrl: p.photo_url || p.photoUrl || '',
+              unit: p.unit || 'Pcs',
+              createdAt: p.created_at || p.createdAt || new Date().toISOString(),
+              updatedAt: p.updated_at || p.updatedAt || new Date().toISOString(),
+            };
+          });
+
+          // Only store when data is received to guarantee full cloud state
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
+          localStorage.setItem('has_synced_cloud', 'true');
+          loadedProductsCount = mappedProducts.length;
+        }
+
+        // 3. Process Users (Admins and Customers) with Safe Fallback for Schema differences
+        if (usersResult.status === 'fulfilled' && !usersResult.value.error && usersResult.value.data) {
+          const remoteUsers = usersResult.value.data;
+          const localUsers = this.getUsers();
+          const remoteIds = new Set(remoteUsers.map((u: any) => u.id));
+          const remoteEmails = new Set(remoteUsers.map((u: any) => (u.email || '').toLowerCase()));
+
+          const mappedRemoteUsers: User[] = remoteUsers.map((u: any) => {
+            const matchedLocal = localUsers.find(
+              (lu) => lu.id === u.id || (lu.email && lu.email.toLowerCase() === (u.email || '').toLowerCase())
+            );
+            const remotePassword = u.password || u.password_hash;
+            let finalPassword = matchedLocal?.password || (u.role === 'admin' ? 'admin' : '123456');
+
+            if (remotePassword && remotePassword.trim() !== '') {
+              if (u.role === 'admin' && remotePassword === 'admin' && matchedLocal?.password && matchedLocal.password !== 'admin') {
+                finalPassword = matchedLocal.password;
+              } else {
+                finalPassword = remotePassword;
+              }
+            }
+
+            return {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role || 'customer',
+              customerType: u.customer_type || u.customerType || matchedLocal?.customerType || 'general',
+              phone: u.phone || matchedLocal?.phone || '',
+              address: u.address || matchedLocal?.address || '',
+              notes: u.notes || matchedLocal?.notes || '',
+              password: finalPassword,
+              status: u.status || matchedLocal?.status || 'approved',
+              createdAt: u.created_at || u.createdAt || matchedLocal?.createdAt || new Date().toISOString(),
+            };
+          });
+
+          // Keep local-only users so newly created local customers are not lost
+          const localOnlyUsers = localUsers.filter(
+            (lu) => !remoteIds.has(lu.id) && !remoteEmails.has((lu.email || '').toLowerCase())
+          );
+
+          // Push local-only users to Supabase in background with schema fault-tolerance
+          localOnlyUsers.forEach((lu) => {
+            safeAsync(
+              (async () => {
+                // Try complete upsert first
+                const { error: fullErr } = await supabase.from('users').upsert({
+                  id: lu.id,
+                  name: lu.name,
+                  email: lu.email,
+                  role: lu.role,
+                  customer_type: lu.customerType || 'general',
+                  phone: lu.phone || null,
+                  address: lu.address || null,
+                  password_hash: lu.password || null,
+                  password: lu.password || null,
+                  status: lu.status,
+                  created_at: lu.createdAt,
+                });
+                if (fullErr) {
+                  // Fallback without password/status if table doesn't have those columns yet
+                  await supabase.from('users').upsert({
+                    id: lu.id,
+                    name: lu.name,
+                    email: lu.email,
+                    role: lu.role,
+                    customer_type: lu.customerType || 'general',
+                    phone: lu.phone || null,
+                    address: lu.address || null,
+                    created_at: lu.createdAt,
+                  });
+                }
+              })()
+            );
+          });
+
+          const mergedUsers = [...mappedRemoteUsers, ...localOnlyUsers];
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(mergedUsers));
+          loadedUsersCount = mergedUsers.length;
+
+          // If current logged-in user changed/updated remotely, update active session
+          const cur = this.getCurrentUser();
+          if (cur) {
+            const fresh = mergedUsers.find((u) => u.id === cur.id || u.email.toLowerCase() === cur.email.toLowerCase());
+            if (fresh) {
+              this.setCurrentUser(fresh);
+            }
+          }
+        }
+
+        // 4. Process Orders (Robust items parsing)
+        if (ordersResult.status === 'fulfilled' && !ordersResult.value.error && ordersResult.value.data) {
+          const remoteOrders = ordersResult.value.data;
+          const mappedOrders: Order[] = remoteOrders.map((o: any) => {
+            let items: any[] = [];
+            if (Array.isArray(o.items)) {
+              items = o.items;
+            } else if (typeof o.items === 'string') {
+              try {
+                items = JSON.parse(o.items);
+              } catch {
+                items = [];
+              }
+            }
+
+            return {
+              id: o.id,
+              orderNumber: o.order_number || o.orderNumber,
+              type: o.type || 'pos',
+              customerId: o.customer_id || o.customerId,
+              customerName: o.customer_name || o.customerName,
+              customerPhone: o.customer_phone || o.customerPhone,
+              customerAddress: o.customer_address || o.customerAddress,
+              customerType: o.customer_type || o.customerType || 'general',
+              items,
+              subtotal: Number(o.subtotal || 0),
+              totalDiscount: Number(o.total_discount ?? o.totalDiscount ?? 0),
+              totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
+              totalBuyCost: Number(o.total_buy_cost ?? o.totalBuyCost ?? 0),
+              profit: Number(o.profit || 0),
+              paymentMethod: o.payment_method || o.paymentMethod || 'cash',
+              amountPaid: Number(o.amount_paid ?? o.amountPaid ?? 0),
+              remainingDebt: Number(o.remaining_debt ?? o.remainingDebt ?? 0),
+              status: o.status || 'completed',
+              notes: o.notes || '',
+              createdAt: o.created_at || o.createdAt || new Date().toISOString(),
+            };
+          });
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mappedOrders));
+          loadedOrdersCount = mappedOrders.length;
+        }
+
+        // 5. Process Debts (Robust payments parsing)
+        if (debtsResult.status === 'fulfilled' && !debtsResult.value.error && debtsResult.value.data) {
+          const remoteDebts = debtsResult.value.data;
+          const mappedDebts: DebtRecord[] = remoteDebts.map((d: any) => {
+            let payments: any[] = [];
+            if (Array.isArray(d.payments)) {
+              payments = d.payments;
+            } else if (typeof d.payments === 'string') {
+              try {
+                payments = JSON.parse(d.payments);
+              } catch {
+                payments = [];
+              }
+            }
+
+            return {
+              id: d.id,
+              customerName: d.customer_name || d.customerName,
+              customerPhone: d.customer_phone || d.customerPhone,
+              customerId: d.customer_id || d.customerId,
+              orderId: d.order_id || d.orderId,
+              source: d.source || 'pos',
+              originalDebt: Number(d.original_debt ?? d.originalDebt ?? 0),
+              remainingDebt: Number(d.remaining_debt ?? d.remainingDebt ?? 0),
+              status: d.status || 'unpaid',
+              notes: d.notes || '',
+              payments,
+              createdAt: d.created_at || d.createdAt || new Date().toISOString(),
+              lastPaymentDate: d.last_payment_date || d.lastPaymentDate,
+            };
+          });
+          localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(mappedDebts));
+          loadedDebtsCount = mappedDebts.length;
+        }
+
+        // 6. Process External Profits
+        if (profitsResult.status === 'fulfilled' && !profitsResult.value.error && profitsResult.value.data) {
+          const remoteProfits = profitsResult.value.data;
+          const mappedProfits: ExternalProfitRecord[] = remoteProfits.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            type: p.type,
+            amount: Number(p.amount || 0),
+            category: p.category,
+            date: p.date,
+            notes: p.notes || '',
+            createdAt: p.created_at || p.createdAt || new Date().toISOString(),
+          }));
+          localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(mappedProfits));
+        }
+
+        this.isSupabaseOnline = true;
+        this.lastSyncTimestamp = new Date().toISOString();
+        this.notifyListeners(false);
+
+        return {
+          success: true,
+          message: `Sinkronisasi cloud sukses! Memuat ${loadedProductsCount} barang, ${loadedUsersCount} pengguna, ${loadedOrdersCount} pesanan & ${loadedDebtsCount} catatan hutang dari Supabase.`,
+        };
+      } catch (err: any) {
+        console.error('Error pulling from Supabase:', err);
+        this.isSupabaseOnline = false;
+        return {
+          success: false,
+          message: `Gagal memuat data dari cloud: ${err?.message || 'Koneksi database terputus'}`,
+        };
+      } finally {
+        this.isSyncing = false;
+        this.activePullPromise = null;
       }
+    })();
 
-      // 4. Fetch Orders
-      const { data: remoteOrders, error: ordErr } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!ordErr && remoteOrders) {
-        const mappedOrders: Order[] = remoteOrders.map((o: any) => ({
-          id: o.id,
-          orderNumber: o.order_number || o.orderNumber,
-          type: o.type || 'pos',
-          customerId: o.customer_id || o.customerId,
-          customerName: o.customer_name || o.customerName,
-          customerPhone: o.customer_phone || o.customerPhone,
-          customerAddress: o.customer_address || o.customerAddress,
-          customerType: o.customer_type || o.customerType || 'general',
-          items: typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []),
-          subtotal: Number(o.subtotal || 0),
-          totalDiscount: Number(o.total_discount ?? o.totalDiscount ?? 0),
-          totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
-          totalBuyCost: Number(o.total_buy_cost ?? o.totalBuyCost ?? 0),
-          profit: Number(o.profit || 0),
-          paymentMethod: o.payment_method || o.paymentMethod || 'cash',
-          amountPaid: Number(o.amount_paid ?? o.amountPaid ?? 0),
-          remainingDebt: Number(o.remaining_debt ?? o.remainingDebt ?? 0),
-          status: o.status || 'completed',
-          notes: o.notes || '',
-          createdAt: o.created_at || o.createdAt || new Date().toISOString(),
-        }));
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mappedOrders));
-      }
-
-      // 5. Fetch Debts
-      const { data: remoteDebts, error: debtErr } = await supabase
-        .from('debts')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!debtErr && remoteDebts) {
-        const mappedDebts: DebtRecord[] = remoteDebts.map((d: any) => ({
-          id: d.id,
-          customerName: d.customer_name || d.customerName,
-          customerPhone: d.customer_phone || d.customerPhone,
-          customerId: d.customer_id || d.customerId,
-          orderId: d.order_id || d.orderId,
-          source: d.source || 'pos',
-          originalDebt: Number(d.original_debt ?? d.originalDebt ?? 0),
-          remainingDebt: Number(d.remaining_debt ?? d.remainingDebt ?? 0),
-          status: d.status || 'unpaid',
-          notes: d.notes || '',
-          payments: typeof d.payments === 'string' ? JSON.parse(d.payments) : (d.payments || []),
-          createdAt: d.created_at || d.createdAt || new Date().toISOString(),
-          lastPaymentDate: d.last_payment_date || d.lastPaymentDate,
-        }));
-        localStorage.setItem(STORAGE_KEYS.DEBTS, JSON.stringify(mappedDebts));
-      }
-
-      // 6. Fetch External Profits
-      const { data: remoteProfits, error: profErr } = await supabase
-        .from('external_profits')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!profErr && remoteProfits) {
-        const mappedProfits: ExternalProfitRecord[] = remoteProfits.map((p: any) => ({
-          id: p.id,
-          title: p.title,
-          type: p.type,
-          amount: Number(p.amount || 0),
-          category: p.category,
-          date: p.date,
-          notes: p.notes || '',
-          createdAt: p.created_at || p.createdAt || new Date().toISOString(),
-        }));
-        localStorage.setItem(STORAGE_KEYS.PROFITS, JSON.stringify(mappedProfits));
-      }
-
-      this.isSupabaseOnline = true;
-      this.lastSyncTimestamp = new Date().toISOString();
-      this.notifyListeners(false);
-
-      const prodCount = remoteProducts ? remoteProducts.length : 0;
-      const userCount = remoteUsers ? remoteUsers.length : 0;
-      return {
-        success: true,
-        message: `Sinkronisasi data cloud sukses! Memuat ${prodCount} produk dan ${userCount} pengguna dari database Supabase.`,
-      };
-    } catch (err: any) {
-      console.error('Error pulling from Supabase:', err);
-      this.isSupabaseOnline = false;
-      return {
-        success: false,
-        message: `Gagal memuat data dari cloud: ${err?.message || 'Koneksi database terputus'}`,
-      };
-    } finally {
-      this.isSyncing = false;
-    }
+    return this.activePullPromise;
   }
 
   // --- SETTINGS ---
@@ -842,7 +920,8 @@ class StorageService {
 
     safeAsync(
       (async () => {
-        const payloadWithCustomerType = {
+        // Attempt full upsert
+        const fullPayload: any = {
           id: userToSave.id,
           name: userToSave.name,
           email: userToSave.email,
@@ -850,39 +929,42 @@ class StorageService {
           customer_type: userToSave.customerType || 'general',
           phone: userToSave.phone || null,
           address: userToSave.address || null,
+          notes: userToSave.notes || null,
           password_hash: userToSave.password || null,
           password: userToSave.password || null,
-          status: userToSave.status,
+          status: userToSave.status || 'approved',
           created_at: userToSave.createdAt,
         };
 
-        const { error } = await supabase.from('users').upsert(payloadWithCustomerType);
+        const { error: fullErr } = await supabase.from('users').upsert(fullPayload);
 
-        if (error) {
-          // If customer_type column doesn't exist yet, retry without it
-          const fallbackPayload = {
+        if (fullErr) {
+          // If optional columns (password/status/notes) don't exist in Supabase table yet, retry with standard core columns
+          const safePayload: any = {
             id: userToSave.id,
             name: userToSave.name,
             email: userToSave.email,
             role: userToSave.role,
+            customer_type: userToSave.customerType || 'general',
             phone: userToSave.phone || null,
             address: userToSave.address || null,
-            password_hash: userToSave.password || null,
-            password: userToSave.password || null,
-            status: userToSave.status,
             created_at: userToSave.createdAt,
           };
-          await supabase.from('users').upsert(fallbackPayload);
+          const { error: safeErr } = await supabase.from('users').upsert(safePayload);
+          if (safeErr) {
+            // Minimal fallback
+            const minimalPayload = {
+              id: userToSave.id,
+              name: userToSave.name,
+              email: userToSave.email,
+              role: userToSave.role,
+              phone: userToSave.phone || null,
+              address: userToSave.address || null,
+              created_at: userToSave.createdAt,
+            };
+            await supabase.from('users').upsert(minimalPayload);
+          }
         }
-
-        // Also do a direct update by email to ensure password field updates regardless of ID matching
-        await supabase
-          .from('users')
-          .update({
-            password: userToSave.password,
-            password_hash: userToSave.password,
-          })
-          .eq('email', userToSave.email);
       })()
     );
 
@@ -1252,12 +1334,27 @@ class StorageService {
           customer_type: u.customerType || 'general',
           phone: u.phone,
           address: u.address,
+          notes: u.notes || null,
           password_hash: u.password || null,
           password: u.password || null,
           status: u.status || 'approved',
           created_at: u.createdAt,
         }));
-        await supabase.from('users').upsert(userRows);
+        const { error: userErr } = await supabase.from('users').upsert(userRows);
+        if (userErr) {
+          // Fallback without password/status/notes if schema columns aren't in Supabase yet
+          const safeUserRows = users.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            customer_type: u.customerType || 'general',
+            phone: u.phone || null,
+            address: u.address || null,
+            created_at: u.createdAt,
+          }));
+          await supabase.from('users').upsert(safeUserRows);
+        }
       }
 
       // 4. Sync Orders & Relational Order Items

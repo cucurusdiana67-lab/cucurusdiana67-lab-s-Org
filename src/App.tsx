@@ -55,13 +55,13 @@ export default function App() {
 
   // Setup live sync with Supabase and cross-tab/device storage updates
   useEffect(() => {
-    // 1. Initial pull from Supabase cloud
-    storage.pullAllDataFromSupabase(true).then(() => {
+    // 1. Subscribe to internal storage and realtime changes first
+    const unsubscribe = storage.subscribe(() => {
       refreshAllState();
     });
 
-    // 2. Subscribe to internal storage and realtime changes
-    const unsubscribe = storage.subscribe(() => {
+    // 2. Initial pull from Supabase cloud
+    storage.pullAllDataFromSupabase(true).then(() => {
       refreshAllState();
     });
 
