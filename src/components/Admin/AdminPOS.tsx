@@ -32,9 +32,13 @@ import {
   PackageCheck,
   Phone,
   Tag,
-  PlusCircle
+  PlusCircle,
+  Volume2,
+  VolumeX,
+  RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { announceScannedProduct, speakText, playErrorTone, playSuccessChime } from '../../lib/soundHelper';
 
 interface AdminPOSProps {
   products: Product[];
@@ -53,6 +57,19 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isCustomItemModalOpen, setIsCustomItemModalOpen] = useState(false);
   const [editingPriceItem, setEditingPriceItem] = useState<CartItem | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [scanFeedback, setScanFeedback] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+    productName?: string;
+  } | null>(null);
+
+  const triggerScanFeedback = (type: 'success' | 'error' | 'info', message: string, productName?: string) => {
+    setScanFeedback({ type, message, productName });
+    setTimeout(() => {
+      setScanFeedback((curr) => (curr?.message === message ? null : curr));
+    }, 4500);
+  };
   
   // Buyer & Pricing Type state
   const [customerType, setCustomerType] = useState<CustomerType>('general');
@@ -194,27 +211,46 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
   const change = paymentMethod === 'cash' ? Math.max(0, cashGiven - finalTotal) : 0;
 
   // Add to POS Cart
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = (product: Product): boolean => {
     if (product.stock <= 0) {
-      alert(`Stok ${product.name} telah habis!`);
-      return;
+      if (soundEnabled) {
+        playErrorTone();
+        speakText(`Stok ${product.name} telah habis`);
+      }
+      triggerScanFeedback('error', `Stok ${product.name} telah habis! (Sisa 0)`, product.name);
+      return false;
     }
 
     const itemPrice = getProductPrice(product, customerType);
+    let added = true;
 
     setPosCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         if (existing.quantity >= product.stock) {
-          alert(`Stok tidak mencukupi (tersedia: ${product.stock})`);
+          if (soundEnabled) {
+            playErrorTone();
+            speakText('Stok tidak mencukupi');
+          }
+          triggerScanFeedback('error', `Stok ${product.name} tidak mencukupi (tersedia: ${product.stock})`, product.name);
+          added = false;
           return prev;
         }
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1, customPrice: itemPrice } : item
+          item.product.id === product.id
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+                // Preserve custom price if cashier previously set it via Ubah Harga
+                customPrice: item.customPrice !== undefined ? item.customPrice : itemPrice,
+              }
+            : item
         );
       }
       return [...prev, { product, quantity: 1, customPrice: itemPrice }];
     });
+
+    return added;
   };
 
   const handleUpdateQty = (productId: string, qty: number) => {
@@ -225,7 +261,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
 
     const product = products.find((p) => p.id === productId);
     if (product && qty > product.stock) {
-      alert(`Stok maksimal tersedia: ${product.stock}`);
+      triggerScanFeedback('error', `Stok maksimal tersedia: ${product.stock}`);
       return;
     }
 
@@ -265,9 +301,13 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
         customPrice: data.sellPrice,
       },
     ]);
+    if (soundEnabled) {
+      announceScannedProduct(data.name);
+    }
+    triggerScanFeedback('success', `Barang luar "${data.name}" ditambahkan ke keranjang.`);
   };
 
-  // Ubah Harga Satuan Item di Keranjang
+  // Ubah Harga Satuan Item di Keranjang (Menu Ubah Harga)
   const handleSaveCartItemPrice = (productId: string, newPrice: number) => {
     setPosCart((prev) =>
       prev.map((item) =>
@@ -282,14 +322,102 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
           : item
       )
     );
+    setEditingPriceItem(null);
+    triggerScanFeedback('success', `Harga satuan berhasil diubah menjadi ${formatRupiah(newPrice)}`);
   };
 
+  // Reset Harga Satuan Item ke Harga Katalog Standar
+  const handleResetCartItemPrice = (productId: string) => {
+    setPosCart((prev) =>
+      prev.map((item) => {
+        if (item.product.id === productId) {
+          const { customPrice, ...rest } = item;
+          return rest;
+        }
+        return item;
+      })
+    );
+    triggerScanFeedback('info', 'Harga satuan dikembalikan ke harga standar.');
+  };
+
+  // Scan Barcode Kamera POS
   const handleScanSuccess = (barcode: string) => {
-    const product = products.find((p) => p.barcode && p.barcode.trim() === barcode.trim());
+    const cleanBarcode = barcode.trim().toLowerCase();
+    const product = products.find(
+      (p) =>
+        (p.barcode && p.barcode.trim().toLowerCase() === cleanBarcode) ||
+        p.id.toLowerCase() === cleanBarcode
+    );
+
     if (product) {
-      handleAddToCart(product);
+      const added = handleAddToCart(product);
+      if (added) {
+        if (soundEnabled) {
+          announceScannedProduct(product.name);
+        }
+        triggerScanFeedback(
+          'success',
+          `"${product.name}" berhasil masuk ke transaksi.`,
+          product.name
+        );
+      }
     } else {
-      alert(`Produk dengan barcode "${barcode}" tidak ditemukan di database.`);
+      if (soundEnabled) {
+        playErrorTone();
+        speakText('Barang tidak ditemukan');
+      }
+      triggerScanFeedback(
+        'error',
+        `Produk dengan barcode "${barcode}" tidak ditemukan di database toko.`
+      );
+    }
+  };
+
+  // Handle Enter key on search input (Support for USB/Bluetooth Gun Barcode Scanner)
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const query = searchQuery.trim();
+      if (!query) return;
+      e.preventDefault();
+
+      const cleanQ = query.toLowerCase();
+      // Try exact barcode match first
+      let matched = products.find(
+        (p) => p.barcode && p.barcode.trim().toLowerCase() === cleanQ
+      );
+
+      // Try exact ID or exact name
+      if (!matched) {
+        matched = products.find(
+          (p) => p.id.toLowerCase() === cleanQ || p.name.toLowerCase() === cleanQ
+        );
+      }
+
+      // Try single search result
+      if (!matched && filteredProducts.length === 1) {
+        matched = filteredProducts[0];
+      }
+
+      if (matched) {
+        const added = handleAddToCart(matched);
+        if (added) {
+          if (soundEnabled) {
+            announceScannedProduct(matched.name);
+          }
+          triggerScanFeedback(
+            'success',
+            `"${matched.name}" masuk ke transaksi.`,
+            matched.name
+          );
+          setSearchQuery('');
+        }
+      } else {
+        if (soundEnabled) {
+          playErrorTone();
+          speakText('Barang tidak ditemukan');
+        }
+        triggerScanFeedback('error', `Barang "${query}" tidak ditemukan.`);
+      }
     }
   };
 
@@ -435,6 +563,37 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
         {/* Left Column: Product Search & Quick Catalog (7 cols) */}
         <div className="lg:col-span-7 space-y-2.5">
+          {/* Scan and Transaction Live Feedback Notification */}
+          {scanFeedback && (
+            <div
+              className={`p-2.5 px-3.5 rounded-xl border flex items-center justify-between gap-2 shadow-xs transition-all animate-in fade-in duration-200 ${
+                scanFeedback.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : scanFeedback.type === 'error'
+                  ? 'bg-rose-50 border-rose-300 text-rose-900'
+                  : 'bg-blue-50 border-blue-300 text-blue-900'
+              }`}
+            >
+              <div className="flex items-center gap-2 text-xs font-bold">
+                {scanFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : scanFeedback.type === 'error' ? (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                ) : (
+                  <Tag className="w-4 h-4 text-blue-600 shrink-0" />
+                )}
+                <span>{scanFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScanFeedback(null)}
+                className="text-slate-400 hover:text-slate-700 text-xs p-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Top Bar with Barcode Scanner & Search */}
           <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-2xs space-y-2.5">
             <div className="flex flex-wrap sm:flex-nowrap gap-2">
@@ -443,9 +602,42 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                 type="button"
                 onClick={() => setIsScannerOpen(true)}
                 className="px-3 py-2 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition shrink-0"
+                title="Scan barcode produk dengan kamera HP (Otomatis masuk transaksi + suara nama barang)"
               >
                 <Camera className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Scan Barcode</span>
+              </button>
+
+              <button
+                id="pos-voice-toggle-btn"
+                type="button"
+                onClick={() => {
+                  const nextVal = !soundEnabled;
+                  setSoundEnabled(nextVal);
+                  if (nextVal) {
+                    playSuccessChime();
+                    speakText('Suara notifikasi kasir aktif');
+                  }
+                }}
+                className={`px-2.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition shrink-0 ${
+                  soundEnabled
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                    : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200'
+                }`}
+                title={
+                  soundEnabled
+                    ? 'Suara sebut nama barang AKTIF (Klik untuk uji coba / matikan)'
+                    : 'Suara sebut nama barang MATI (Klik untuk aktifkan)'
+                }
+              >
+                {soundEnabled ? (
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                )}
+                <span className="hidden sm:inline">
+                  {soundEnabled ? 'Suara Kasir' : 'Suara Mati'}
+                </span>
               </button>
 
               <button
@@ -466,8 +658,9 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Ketik nama barang atau nomor barcode..."
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Ketik nama / scan barcode lalu tekan Enter..."
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition font-medium"
                 />
               </div>
             </div>
@@ -741,6 +934,11 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                               Borongan
                             </span>
                           )}
+                          {item.customPrice !== undefined && (
+                            <span className="text-[8.5px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded shrink-0 border border-emerald-300">
+                              Harga Diubah
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-slate-500 text-[10px] font-mono mt-0.5">
                           <span>{formatRupiah(itemPrice)} x {item.quantity}</span>
@@ -753,6 +951,17 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
                             <Edit3 className="w-2.5 h-2.5" />
                             <span>Ubah Harga</span>
                           </button>
+                          {item.customPrice !== undefined && (
+                            <button
+                              type="button"
+                              onClick={() => handleResetCartItemPrice(item.product.id)}
+                              className="text-slate-400 hover:text-slate-600 underline font-sans text-[9.5px] flex items-center gap-0.5"
+                              title="Kembalikan ke harga katalog asli"
+                            >
+                              <RotateCcw className="w-2.5 h-2.5" />
+                              <span>Reset</span>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -1405,6 +1614,7 @@ export const AdminPOS: React.FC<AdminPOSProps> = ({
         <EditCartItemPriceModal
           isOpen={!!editingPriceItem}
           onClose={() => setEditingPriceItem(null)}
+          item={editingPriceItem}
           cartItem={editingPriceItem}
           customerType={customerType}
           onSavePrice={handleSaveCartItemPrice}

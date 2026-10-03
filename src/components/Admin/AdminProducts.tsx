@@ -15,8 +15,10 @@ import {
   Filter, 
   Barcode,
   Image as ImageIcon,
-  ExternalLink
+  ExternalLink,
+  Check
 } from 'lucide-react';
+import { playSuccessChime } from '../../lib/soundHelper';
 
 interface AdminProductsProps {
   products: Product[];
@@ -33,6 +35,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -85,6 +88,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     setMinStock(5);
     setUnit('Pcs');
     setPhotoUrl('');
+    setScannedFeedback(null);
     setIsModalOpen(true);
   };
 
@@ -101,7 +105,33 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
     setMinStock(p.minStock);
     setUnit(p.unit || 'Pcs');
     setPhotoUrl(p.photoUrl || '');
+    setScannedFeedback(null);
     setIsModalOpen(true);
+  };
+
+  const handleProductScanSuccess = (code: string) => {
+    const cleanCode = code.trim();
+    if (!cleanCode) return;
+
+    playSuccessChime();
+    setBarcode(cleanCode);
+    setScannedFeedback(`Barcode berhasil discan: ${cleanCode}`);
+    setIsScannerOpen(false);
+
+    // If modal is not open, check if product already exists
+    if (!isModalOpen) {
+      const existing = products.find(
+        (p) => p.barcode && p.barcode.trim().toLowerCase() === cleanCode.toLowerCase()
+      );
+      if (existing) {
+        handleOpenEdit(existing);
+        setScannedFeedback(`Membuka data produk terdaftar: ${existing.name}`);
+      } else {
+        handleOpenAdd();
+        setBarcode(cleanCode);
+        setScannedFeedback(`Barcode baru dimasukkan: ${cleanCode}`);
+      }
+    }
   };
 
   const handleDelete = (id: string, prodName: string) => {
@@ -147,14 +177,6 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
 
   return (
     <div className="space-y-3 pb-16">
-      {/* Barcode Scanner Modal */}
-      <BarcodeScannerModal
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        onScanSuccess={(code) => setBarcode(code)}
-        title="Scan Barcode untuk Barang Baru"
-      />
-
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
@@ -170,15 +192,28 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
           </p>
         </div>
 
-        <button
-          id="add-product-btn"
-          type="button"
-          onClick={handleOpenAdd}
-          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>+ Tambah Barang Baru</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            id="header-scan-barcode-btn"
+            type="button"
+            onClick={() => setIsScannerOpen(true)}
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
+            title="Scan barcode dari kamera HP untuk cek atau tambah barang"
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Scan Barcode</span>
+          </button>
+
+          <button
+            id="add-product-btn"
+            type="button"
+            onClick={handleOpenAdd}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Tambah Barang Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search */}
@@ -346,9 +381,16 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
             <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
               {/* Barcode & Scan */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Kode Barcode (Scan dari HP / Manual)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="input-prod-barcode" className="block font-semibold text-slate-700">
+                    Kode Barcode (Scan dari HP / Manual)
+                  </label>
+                  {barcode && (
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      ✓ Kode Barcode Terisi
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Barcode className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -356,20 +398,34 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
                       id="input-prod-barcode"
                       type="text"
                       value={barcode}
-                      onChange={(e) => setBarcode(e.target.value)}
+                      onChange={(e) => {
+                        setBarcode(e.target.value);
+                        setScannedFeedback(null);
+                      }}
                       placeholder="Contoh: 8992753110111"
-                      className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
+                      className={`w-full pl-9 pr-3 py-2 border rounded-lg text-xs font-mono transition ${
+                        scannedFeedback
+                          ? 'border-emerald-500 bg-emerald-50/30 text-emerald-900 ring-2 ring-emerald-500/20'
+                          : 'border-slate-300'
+                      }`}
                     />
                   </div>
                   <button
+                    id="scan-prod-barcode-btn"
                     type="button"
                     onClick={() => setIsScannerOpen(true)}
-                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold flex items-center gap-1 shrink-0"
+                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-lg font-semibold flex items-center gap-1.5 shrink-0 shadow-2xs transition"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>Scan HP</span>
                   </button>
                 </div>
+                {scannedFeedback && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 mt-1.5 animate-in fade-in">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>{scannedFeedback}</span>
+                  </div>
+                )}
               </div>
 
               {/* Product Name */}
@@ -549,6 +605,18 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({
           </div>
         </div>
       )}
+      {/* Barcode Scanner Modal with highest z-index */}
+      <BarcodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={handleProductScanSuccess}
+        title={isModalOpen ? 'Scan Barcode untuk Barang' : 'Scan Barcode Produk'}
+        subtitle={
+          isModalOpen
+            ? 'Arahkan kamera ke barcode, nomor akan otomatis mengisi formulir barang'
+            : 'Arahkan kamera ke barcode untuk memeriksa atau mendaftarkan barang'
+        }
+      />
     </div>
   );
 };
